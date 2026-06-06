@@ -229,4 +229,63 @@ public:
     }
 };
 
+// ── JSON Array Helper ─────────────────────────────────────────
+// Easily convert an initializer list of any type to a Json::Value array.
+template<typename T>
+inline Json::Value array(std::initializer_list<T> list) {
+    Json::Value arr(Json::arrayValue);
+    for (const auto& val : list) {
+        arr.append(val);
+    }
+    return arr;
+}
+
+// Easily convert a vector of any type to a Json::Value array.
+template<typename T>
+inline Json::Value array(const std::vector<T>& vec) {
+    Json::Value arr(Json::arrayValue);
+    for (const auto& val : vec) {
+        arr.append(val);
+    }
+    return arr;
+}
+
+// ── JSON Object Helpers ───────────────────────────────────────
+// Easily convert an initializer list of key-value pairs to a Json::Value object.
+inline Json::Value object(std::initializer_list<std::pair<std::string, Json::Value>> items) {
+    Json::Value obj(Json::objectValue);
+    for (const auto& item : items) {
+        obj[item.first] = item.second;
+    }
+    return obj;
+}
+
+// Support single key-value pair syntax directly, e.g. xp::object("key", value)
+inline Json::Value object(const std::string& key, const Json::Value& value) {
+    Json::Value obj(Json::objectValue);
+    obj[key] = value;
+    return obj;
+}
+
+// Support single pair struct syntax, e.g. xp::object({"key", value})
+inline Json::Value object(const std::pair<std::string, Json::Value>& pair) {
+    Json::Value obj(Json::objectValue);
+    obj[pair.first] = pair.second;
+    return obj;
+}
+
+// ── JSON Primitive Helpers ────────────────────────────────────
+template<typename T>
+inline Json::Value number(T val) {
+    return Json::Value(val);
+}
+
+inline Json::Value boolean(bool val) {
+    return Json::Value(val);
+}
+
+inline Json::Value null() {
+    return Json::Value(Json::nullValue);
+}
+
 } // namespace xp

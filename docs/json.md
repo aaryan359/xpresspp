@@ -93,6 +93,35 @@ Response:
 ]
 ```
 
+### JavaScript-like JSON Builders (`xp::array`, `xp::object`, `xp::number`, `xp::boolean`, `xp::null`)
+
+To quickly serialize standard C++ containers (like `std::initializer_list` or `std::vector`) or write clean, nested JSON objects similar to JavaScript, use the built-in creator helpers:
+
+```cpp
+// 1. Arrays (from initializer lists or vectors)
+auto arr = xp::array({1, 2, 3, 4});
+
+// 2. Objects (from key-value pairs)
+auto obj = xp::object({
+    {"key", "value"},
+    {"nested", xp::object({"inner_key", "inner_value"})}
+});
+
+// 3. Primitives
+auto num = xp::number(42);
+auto boolean = xp::boolean(true);
+auto empty = xp::null();
+
+// 4. Combined directly in res.json()
+res.json({
+    {"status", "healthy"},
+    {"payload", xp::object({
+        {"items", xp::array({1, 2, 3})},
+        {"metadata", xp::object({{"count", 3}})}
+    })}
+});
+```
+
 ---
 
 ## Checking types safely

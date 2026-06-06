@@ -26,10 +26,12 @@ int main() {
 
         string name = body["name"].asString();
         auto num = xp::number(10);
-
         auto obj = xp::object({"key", "value"});
-        auto nested = xp::object({"key", "value"});
-        auto arr = xp::array({1,2,3,4,5});  
+        auto nested = xp::object({
+            {"nested_key", xp::object({"inner_key", "inner_value"})},
+            {"nested_num", xp::number(42)}
+        });
+        auto arr = xp::array({1,2,3,4,5});
 
         if(name.empty()){
             throw xp::BadRequestError("Name is required");

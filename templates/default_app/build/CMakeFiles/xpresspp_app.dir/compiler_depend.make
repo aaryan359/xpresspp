@@ -4,6 +4,7 @@
 CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/default_app/main.cpp \
   /home/aaryan/Desktop/xpress++/core/include/xpresspp/app.h \
   /home/aaryan/Desktop/xpress++/core/include/xpresspp/config.h \
+  /home/aaryan/Desktop/xpress++/core/include/xpresspp/errors.h \
   /home/aaryan/Desktop/xpress++/core/include/xpresspp/logger.h \
   /home/aaryan/Desktop/xpress++/core/include/xpresspp/middleware/auth.h \
   /home/aaryan/Desktop/xpress++/core/include/xpresspp/middleware/body_limit.h \
@@ -774,7 +775,7 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 
 /usr/include/jsoncpp/json/writer.h:
 
-/usr/include/c++/13/cstdint:
+/usr/include/jsoncpp/json/reader.h:
 
 /usr/include/c++/13/bits/sstream.tcc:
 
@@ -803,10 +804,6 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 /usr/local/include/trantor/exports.h:
 
 /usr/include/c++/13/bits/locale_facets.tcc:
-
-/usr/include/c++/13/cstdlib:
-
-/usr/include/c++/13/bits/regex_scanner.h:
 
 /usr/include/c++/13/bits/stl_map.h:
 
@@ -944,6 +941,10 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 
 /usr/include/c++/13/bits/exception_defines.h:
 
+/usr/include/x86_64-linux-gnu/bits/posix2_lim.h:
+
+/usr/include/c++/13/bits/enable_special_members.h:
+
 /usr/include/x86_64-linux-gnu/bits/types/struct_sched_param.h:
 
 /usr/include/asm-generic/errno.h:
@@ -1022,6 +1023,22 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 
 /usr/include/c++/13/bits/atomic_futex.h:
 
+/usr/include/c++/13/bits/ios_base.h:
+
+/home/aaryan/Desktop/xpress++/core/include/xpresspp/response.h:
+
+/usr/include/x86_64-linux-gnu/bits/types/time_t.h:
+
+/home/aaryan/Desktop/xpress++/core/include/xpresspp/middleware/session.h:
+
+/home/aaryan/Desktop/xpress++/core/include/xpresspp/errors.h:
+
+/usr/include/alloca.h:
+
+/home/aaryan/Desktop/xpress++/templates/default_app/main.cpp:
+
+/usr/include/c++/13/bits/basic_string.tcc:
+
 /usr/include/x86_64-linux-gnu/bits/types/sigset_t.h:
 
 /usr/include/asm-generic/bitsperlong.h:
@@ -1096,12 +1113,6 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 
 /usr/include/c++/13/unordered_map:
 
-/usr/include/x86_64-linux-gnu/bits/types/time_t.h:
-
-/home/aaryan/Desktop/xpress++/core/include/xpresspp/middleware/session.h:
-
-/usr/include/c++/13/bits/ios_base.h:
-
 /usr/include/c++/13/bits/basic_ios.h:
 
 /usr/include/c++/13/bits/regex_error.h:
@@ -1112,29 +1123,15 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 
 /usr/include/c++/13/backward/auto_ptr.h:
 
-/usr/include/alloca.h:
-
-/home/aaryan/Desktop/xpress++/templates/default_app/main.cpp:
-
-/usr/include/c++/13/bits/basic_string.tcc:
-
-/home/aaryan/Desktop/xpress++/core/include/xpresspp/response.h:
-
 /usr/local/include/drogon/IOThreadStorage.h:
 
 /usr/include/c++/13/bits/hash_bytes.h:
 
 /usr/include/c++/13/array:
 
-/usr/include/x86_64-linux-gnu/bits/posix2_lim.h:
-
-/usr/include/c++/13/bits/enable_special_members.h:
-
 /usr/include/x86_64-linux-gnu/bits/long-double.h:
 
 /usr/include/c++/13/bits/algorithmfwd.h:
-
-/usr/include/jsoncpp/json/reader.h:
 
 /usr/include/c++/13/bits/alloc_traits.h:
 
@@ -1182,12 +1179,6 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 
 /usr/include/jsoncpp/json/json_features.h:
 
-/usr/include/x86_64-linux-gnu/c++/13/bits/ctype_inline.h:
-
-/usr/include/c++/13/bits/std_function.h:
-
-/usr/include/c++/13/bits/char_traits.h:
-
 /usr/include/c++/13/bits/hashtable_policy.h:
 
 /usr/include/c++/13/bits/deque.tcc:
@@ -1209,6 +1200,18 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 /usr/include/x86_64-linux-gnu/c++/13/bits/c++io.h:
 
 /usr/include/c++/13/typeinfo:
+
+/usr/include/x86_64-linux-gnu/c++/13/bits/ctype_inline.h:
+
+/usr/include/c++/13/bits/char_traits.h:
+
+/usr/include/c++/13/bits/std_function.h:
+
+/usr/include/c++/13/cstdint:
+
+/usr/include/c++/13/bits/regex_scanner.h:
+
+/usr/include/c++/13/cstdlib:
 
 /usr/include/c++/13/bits/std_mutex.h:
 

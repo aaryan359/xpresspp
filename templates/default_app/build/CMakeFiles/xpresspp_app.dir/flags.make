@@ -4,7 +4,7 @@
 # compile CXX with /usr/bin/c++
 CXX_DEFINES = -DHAS_YAML_CPP
 
-CXX_INCLUDES = -I/home/aaryan/Desktop/xpress++/templates/default_app/../../core/include -isystem /usr/include/jsoncpp
+CXX_INCLUDES = -I/home/aaryan/Desktop/xpress++/templates/default_app/vendor/xpresspp/include -I/home/aaryan/Desktop/xpress++/templates/default_app/../../core/include -isystem /usr/include/jsoncpp
 
 CXX_FLAGS = -g -std=c++20
 

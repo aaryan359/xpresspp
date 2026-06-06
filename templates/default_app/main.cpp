@@ -1,30 +1,44 @@
 #include <xpresspp/xpresspp.h>
 #include <stdexcept>
+#include <iostream>
+
+using namespace std;
 
 int main() {
     xp::App app;
 
-    // ── Healthcheck ──────────────────────────────────────────
+    
     app.get("/api/ping", [](xp::Request& req, xp::Response& res) {
+
+
+        auto data = xp::array({1,1,1,1,1,1,1,1,1,1,1,1,1,1,1});
+
         res.json({
             {"status",    "healthy"},
-            {"framework", "Xpress++"}
+            {"data", data}
         });
     });
 
-    // ── Example: typed errors ────────────────────────────────
-    // Throw xp::BadRequestError, xp::NotFoundError, etc. from
-    // any handler and xpress++ will return the right HTTP status.
-    //
-    // app.get("/api/users/:id", [](xp::Request& req, xp::Response& res) {
-    //     const auto id = req.param("id");
-    //     if (id.empty()) {
-    //         throw xp::BadRequestError("id parameter is required");
-    //     }
-    //     // ... fetch from DB ...
-    //     throw xp::NotFoundError("User " + id + " not found");
-    // });
+    app.post("/api/greet", [](xp::Request& req, xp::Response& res) {
+        auto body = req.json();
 
-    app.listen(8080);
+        cout<<" name is not coming "<<endl;
+
+        string name = body["name"].asString();
+        auto num = xp::number(10);
+
+        auto obj = xp::object({"key", "value"});
+        auto nested = xp::object({"key", "value"});
+        auto arr = xp::array({1,2,3,4,5});  
+
+        if(name.empty()){
+            throw xp::BadRequestError("Name is required");
+        }
+        res.json({
+            {"message", "Hello " + name}
+        });
+    });
+
+    app.listen(8082);
     return 0;
 }

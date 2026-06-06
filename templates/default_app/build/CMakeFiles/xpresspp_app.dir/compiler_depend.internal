@@ -5,6 +5,7 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o
  /home/aaryan/Desktop/xpress++/templates/default_app/main.cpp
  /home/aaryan/Desktop/xpress++/core/include/xpresspp/app.h
  /home/aaryan/Desktop/xpress++/core/include/xpresspp/config.h
+ /home/aaryan/Desktop/xpress++/core/include/xpresspp/errors.h
  /home/aaryan/Desktop/xpress++/core/include/xpresspp/logger.h
  /home/aaryan/Desktop/xpress++/core/include/xpresspp/middleware/auth.h
  /home/aaryan/Desktop/xpress++/core/include/xpresspp/middleware/body_limit.h

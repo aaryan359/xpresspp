@@ -509,6 +509,13 @@ static void explainCompilerErrors(const std::string& raw_output) {
                    "          Change: \"Hello \" + name\n"
                    "          To:     \"Hello \" + name.asString()";
         }
+        else if (diag.message.find("nullptr_t") != std::string::npos && 
+                 (diag.message.find("Json::Value") != std::string::npos || diag.message.find("Value") != std::string::npos)) {
+            hint = "You are trying to pass 'nullptr' as a JSON null value.\n"
+                   "          In C++, 'nullptr' cannot be implicitly converted to a JSON null.\n"
+                   "          Change: nullptr\n"
+                   "          To:     xp::null()";
+        }
         else if (diag.message.find("xp::Response::json") != std::string::npos || 
                  (diag.message.find("json") != std::string::npos && diag.message.find("initializer_list") != std::string::npos)) {
             hint = "No matching function to pass this initializer list to res.json().\n"

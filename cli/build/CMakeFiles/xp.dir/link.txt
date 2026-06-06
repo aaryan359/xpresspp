@@ -1,1 +1,1 @@
-/usr/bin/c++ CMakeFiles/xp.dir/src/main.cpp.o -o xp 
+/usr/bin/c++ -g CMakeFiles/xp.dir/src/main.cpp.o -o xp 

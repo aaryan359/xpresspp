@@ -1,5 +1,6 @@
 #pragma once
 
+#include "errors.h"
 #include "request.h"
 #include "response.h"
 #include "router.h"

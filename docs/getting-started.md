@@ -59,7 +59,7 @@ The `xp` CLI is the easiest way to create and manage Xpress++ projects.
 
 ```bash
 # Clone the Xpress++ repo
-git clone https://github.com/your-org/xpresspp
+git clone https://github.com/aaryan359/xpresspp
 cd xpresspp
 
 # Build the CLI

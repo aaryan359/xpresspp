@@ -4,13 +4,13 @@ export default defineConfig({
   title: 'Xpress++',
   description: 'Dragon-speed, Express-style C++ web framework — complete documentation.',
   cleanUrls: true,
-  appearance: 'auto',
+  appearance: 'dark',
   lastUpdated: true,
   markdown: {
     lineNumbers: true,
     theme: {
       light: 'github-light',
-      dark:  'one-dark-pro'
+      dark: 'one-dark-pro'
     }
   },
   head: [
@@ -29,12 +29,12 @@ export default defineConfig({
       provider: 'local'
     },
     nav: [
-      { text: 'Guide',     link: '/getting-started' },
+      { text: 'Guide', link: '/getting-started' },
       { text: 'Reference', link: '/request' },
-      { text: 'CLI',       link: '/cli' },
+      { text: 'CLI', link: '/cli' },
       {
         text: 'GitHub',
-        link: 'https://github.com/your-org/xpresspp',
+        link: 'https://github.com/aaryan359/xpresspp',
         target: '_blank'
       }
     ],
@@ -42,57 +42,57 @@ export default defineConfig({
       {
         text: '🚀 Getting Started',
         items: [
-          { text: 'Introduction',      link: '/'                   },
-          { text: 'Installation',      link: '/getting-started'    },
-          { text: 'Project structure', link: '/project-structure'  },
-          { text: 'Dependencies',      link: '/dependencies'       },
+          { text: 'Introduction', link: '/' },
+          { text: 'Installation', link: '/getting-started' },
+          { text: 'Project structure', link: '/project-structure' },
+          { text: 'Dependencies', link: '/dependencies' },
         ]
       },
       {
         text: '⚡ Core Framework',
         items: [
-          { text: 'Routing',           link: '/routing'           },
-          { text: 'Request',           link: '/request'           },
-          { text: 'Response',          link: '/response'          },
-          { text: 'Middleware',        link: '/middleware'         },
-          { text: 'Error handling',    link: '/error-handling'    },
-          { text: 'Configuration',     link: '/configuration'     },
+          { text: 'Routing', link: '/routing' },
+          { text: 'Request', link: '/request' },
+          { text: 'Response', link: '/response' },
+          { text: 'Middleware', link: '/middleware' },
+          { text: 'Error handling', link: '/error-handling' },
+          { text: 'Configuration', link: '/configuration' },
         ]
       },
       {
         text: '🧱 Built-in Middleware',
         items: [
-          { text: 'CORS',              link: '/cors'              },
-          { text: 'Authentication',    link: '/authentication'    },
-          { text: 'Rate limiting',     link: '/rate-limit'        },
-          { text: 'Security headers',  link: '/security'          },
-          { text: 'CSRF protection',   link: '/csrf'              },
-          { text: 'Session',           link: '/session'           },
-          { text: 'Request ID',        link: '/request-id'        },
-          { text: 'Body limit',        link: '/body-limit'        },
-          { text: 'Validation',        link: '/validation'        },
-          { text: 'Logging',           link: '/logging'           },
+          { text: 'CORS', link: '/cors' },
+          { text: 'Authentication', link: '/authentication' },
+          { text: 'Rate limiting', link: '/rate-limit' },
+          { text: 'Security headers', link: '/security' },
+          { text: 'CSRF protection', link: '/csrf' },
+          { text: 'Session', link: '/session' },
+          { text: 'Request ID', link: '/request-id' },
+          { text: 'Body limit', link: '/body-limit' },
+          { text: 'Validation', link: '/validation' },
+          { text: 'Logging', link: '/logging' },
         ]
       },
       {
         text: '📦 Features',
         items: [
-          { text: 'Static files',      link: '/static-files'      },
-          { text: 'File uploads',      link: '/file-uploads'      },
-          { text: 'JSON',              link: '/json'              },
-          { text: 'Cookies',           link: '/cookies'           },
+          { text: 'Static files', link: '/static-files' },
+          { text: 'File uploads', link: '/file-uploads' },
+          { text: 'JSON', link: '/json' },
+          { text: 'Cookies', link: '/cookies' },
         ]
       },
       {
         text: '🔧 Tooling',
         items: [
-          { text: 'xp CLI',            link: '/cli'               },
-          { text: 'Next steps',        link: '/next-steps'        },
+          { text: 'xp CLI', link: '/cli' },
+          { text: 'Next steps', link: '/next-steps' },
         ]
       }
     ],
     editLink: {
-      pattern: 'https://github.com/your-org/xpresspp/edit/main/docs/:path',
+      pattern: 'https://github.com/aaryan359/xpresspp/edit/main/docs/:path',
       text: 'Edit this page'
     },
     footer: {
@@ -100,7 +100,7 @@ export default defineConfig({
       copyright: 'Copyright © 2026 Xpress++'
     },
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/your-org/xpresspp' }
+      { icon: 'github', link: 'https://github.com/aaryan359/xpresspp' }
     ]
   }
 })

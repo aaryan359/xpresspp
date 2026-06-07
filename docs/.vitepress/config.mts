@@ -55,6 +55,7 @@ export default defineConfig({
           { text: 'Request', link: '/request' },
           { text: 'Response', link: '/response' },
           { text: 'Middleware', link: '/middleware' },
+          { text: 'Database', link: '/database' },
           { text: 'Error handling', link: '/error-handling' },
           { text: 'Configuration', link: '/configuration' },
         ]

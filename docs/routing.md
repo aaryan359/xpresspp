@@ -36,6 +36,30 @@ app.post("/users", [](xp::Request& req, xp::Response& res) {
 
 ---
 
+## Asynchronous Routing (`async` & `await`)
+
+Xpress++ supports C++20 coroutines using a clean preprocessor macro system that matches JavaScript/Node.js syntax. This allows you to perform non-blocking operations (like database queries) with maximum ergonomics.
+
+Simply declare your route lambda as `async`, and use `await` before any asynchronous call:
+
+```cpp
+app.get("/api/users", [](xp::Request& req, xp::Response& res) async {
+    try {
+        // Query the database asynchronously without blocking other requests
+        auto result = await xp::query("SELECT id, name FROM users;");
+        
+        res.json(xp::resultToJson(result));
+    } catch (const std::exception& e) {
+        res.status(500).json({{"error", e.what()}});
+    }
+});
+```
+
+> [!NOTE]
+> When performing an early return inside an `async` handler, you must use **`co_return;`** instead of `return;` to satisfy C++20 coroutine compiler requirements.
+
+---
+
 ## URL parameters
 
 Capture dynamic segments using `:name` in your path.

@@ -42,7 +42,7 @@ export default defineConfig({
     ],
     sidebar: [
       {
-        text: '🚀 Getting Started',
+        text: ' Getting Started',
         items: [
           { text: 'Introduction', link: '/' },
           { text: 'Installation', link: '/getting-started' },
@@ -52,7 +52,7 @@ export default defineConfig({
         ]
       },
       {
-        text: '⚡ Core Framework',
+        text: ' Core Framework',
         items: [
           { text: 'Async & Await', link: '/async-await' },
           { text: 'Routing', link: '/routing' },
@@ -65,7 +65,7 @@ export default defineConfig({
         ]
       },
       {
-        text: '🧱 Built-in Middleware',
+        text: ' Built-in Middleware',
         items: [
           { text: 'CORS', link: '/cors' },
           { text: 'Authentication', link: '/authentication' },
@@ -80,7 +80,7 @@ export default defineConfig({
         ]
       },
       {
-        text: '📦 Features',
+        text: ' Features',
         items: [
           { text: 'Static files', link: '/static-files' },
           { text: 'File uploads', link: '/file-uploads' },
@@ -89,7 +89,7 @@ export default defineConfig({
         ]
       },
       {
-        text: '🔧 Tooling',
+        text: ' Tooling',
         items: [
           { text: 'xp CLI', link: '/cli' },
           { text: 'Next steps', link: '/next-steps' },

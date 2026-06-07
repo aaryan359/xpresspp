@@ -4,7 +4,7 @@ Xpress++ is engineered to deliver **bare-metal C++ speed** with the **expressive
 
 ---
 
-## 💻 Test Environment & Hardware Specs
+## Test Environment & Hardware Specs
 
 The benchmarks were conducted locally to ensure isolated execution and avoid network noise.
 
@@ -17,7 +17,7 @@ The benchmarks were conducted locally to ensure isolated execution and avoid net
 
 ---
 
-## 📊 Performance & Resource Metrics
+## Performance & Resource Metrics
 
 Unlike simple throughput tests, this benchmark evaluates **four dimensions of production readiness**: throughput, average latency, tail latency stability (P99), and memory footprint.
 
@@ -33,26 +33,26 @@ Unlike simple throughput tests, this benchmark evaluates **four dimensions of pr
 
 ---
 
-## 🔍 Multi-Dimensional Architectural Breakdown
+## Multi-Dimensional Architectural Breakdown
 
-### 1. 🧠 Memory footprint (Peak RAM)
+### 1. Memory footprint (Peak RAM)
 One of the most drastic differences between C++ and interpreted runtimes is memory consumption.
 * **Xpress++** and **Rust** operate natively on the hardware, requiring **under 20 MB of RAM** under extreme concurrency load.
 * **Express** and **FastAPI** require clustered processes to scale across CPU cores. Due to the overhead of the Node V8 engine and Python interpreter for each worker, they consume between **780 MB and 1.4 GB of RAM** under identical loads.
 * **Xpress++ is 40x to 70x more memory-efficient** than Express and FastAPI, allowing you to run dozens of microservices on a single entry-level cloud instance.
 
-### 2. ⚡ Tail Latencies & GC Resilience (P99)
+### 2. Tail Latencies & GC Resilience (P99)
 In high-throughput systems, median latency (P50) is only half the story. High **P99 latencies** (the worst 1% of requests) degrade user experience.
 * **Xpress++** uses native C++ compile-time memory management (RAII) and does not have a Garbage Collector. Latency remains flat and highly predictable (**8.37 ms P99**).
 * **Express** and **FastAPI** experience periodic garbage collection sweeps that halt the event loop, causing tail latency to spike to **15ms - 20ms**.
 
-### 3. 🎯 CPU Efficiency & Event Loop Routing
+### 3. CPU Efficiency & Event Loop Routing
 * **Rust (Axum)** uses a multi-threaded work-stealing event loop (Tokio) that balances tasks dynamically across cores, yielding unmatched I/O forwarding.
 * **Xpress++** utilizes Drogon's thread-per-core design with Linux socket port-reuse (`SO_REUSEPORT`). By bypassing standard copy operations using C++ move semantics, Xpress++ achieves a highly scalable architecture that matches Go's latency while remaining far more memory efficient.
 
 ---
 
-## 🛠️ Replication Methodology
+## Replication Methodology
 
 To run these benchmarks on your local machine, ensure you have the required runtimes (`go`, `cargo`, `npm`, `python3-venv`, and `wrk`) installed, then run the automated script from the project root:
 

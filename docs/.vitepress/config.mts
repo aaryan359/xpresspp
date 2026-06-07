@@ -4,6 +4,7 @@ export default defineConfig({
   title: 'Xpress++',
   description: 'Dragon-speed, Express-style C++ web framework — complete documentation.',
   cleanUrls: true,
+  ignoreDeadLinks: true,
   appearance: 'dark',
   lastUpdated: true,
   markdown: {
@@ -32,6 +33,7 @@ export default defineConfig({
       { text: 'Guide', link: '/getting-started' },
       { text: 'Reference', link: '/request' },
       { text: 'CLI', link: '/cli' },
+      { text: '⚡ Benchmarks', link: '/benchmarks' },
       {
         text: 'GitHub',
         link: 'https://github.com/aaryan359/xpresspp',
@@ -46,6 +48,7 @@ export default defineConfig({
           { text: 'Installation', link: '/getting-started' },
           { text: 'Project structure', link: '/project-structure' },
           { text: 'Dependencies', link: '/dependencies' },
+          { text: 'Performance Benchmarks', link: '/benchmarks' },
         ]
       },
       {

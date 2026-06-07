@@ -17,3 +17,6 @@ target_link_libraries(xpresspp_benchmark PRIVATE
     Drogon::Drogon 
     jsoncpp
 )
+
+target_compile_options(xpresspp_benchmark PRIVATE -O3 -march=native -flto)
+target_link_options(xpresspp_benchmark PRIVATE -O3 -flto)

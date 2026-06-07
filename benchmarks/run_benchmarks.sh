@@ -52,8 +52,10 @@ run_wrk_test() {
     wrk -t2 -c50 -d2s http://127.0.0.1:${port}${path} >/dev/null 2>&1
 
     # Real run
+    local num_cores
+    num_cores=$(nproc 2>/dev/null || echo 4)
     local output
-    output=$(wrk -t4 -c200 -d5s http://127.0.0.1:${port}${path})
+    output=$(wrk -t"${num_cores}" -c400 -d5s http://127.0.0.1:${port}${path})
     
     local rps
     rps=$(echo "$output" | grep "Requests/sec:" | awk '{print $2}')
@@ -115,8 +117,8 @@ fi
 echo -e "\n${CYAN}▸ Running Xpress++ Server...${RESET}"
 ./xpresspp/build/xpresspp_benchmark >/dev/null 2>&1 &
 XP_PID=$!
-run_wrk_test 8080 "/json" "Xpress++" "C++20"
-run_wrk_test 8080 "/text" "Xpress++" "C++20"
+run_wrk_test 8085 "/json" "Xpress++" "C++20"
+run_wrk_test 8085 "/text" "Xpress++" "C++20"
 kill $XP_PID 2>/dev/null || true
 wait $XP_PID 2>/dev/null || true
 
@@ -160,7 +162,8 @@ fi
 if [ -d "fastapi/venv" ]; then
     echo -e "\n${CYAN}▸ Running FastAPI (Python) Server...${RESET}"
     cd fastapi
-    ./venv/bin/uvicorn main:app --port 8000 --workers 4 --log-level warning >/dev/null 2>&1 &
+    num_cores=$(nproc 2>/dev/null || echo 4)
+    ./venv/bin/uvicorn main:app --port 8000 --workers "${num_cores}" --loop uvloop --http httptools --log-level warning >/dev/null 2>&1 &
     PY_PID=$!
     cd ..
     run_wrk_test 8000 "/json" "FastAPI" "Python"

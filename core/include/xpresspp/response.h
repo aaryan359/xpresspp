@@ -66,18 +66,36 @@ public:
         return *this;
     }
 
-    Response& send(const std::string& text) {
+    Response& send(std::string text) {
+        native_response_->setBody(std::move(text));
+        native_response_->setContentTypeCode(drogon::CT_TEXT_PLAIN);
+        sent_ = true;
+        return *this;
+    }
+
+    Response& send(const char* text) {
         native_response_->setBody(text);
         native_response_->setContentTypeCode(drogon::CT_TEXT_PLAIN);
         sent_ = true;
         return *this;
     }
 
-    Response& text(const std::string& value) {
+    Response& text(std::string value) {
+        return send(std::move(value));
+    }
+
+    Response& text(const char* value) {
         return send(value);
     }
 
-    Response& html(const std::string& markup) {
+    Response& html(std::string markup) {
+        native_response_->setBody(std::move(markup));
+        native_response_->addHeader("Content-Type", "text/html; charset=utf-8");
+        sent_ = true;
+        return *this;
+    }
+
+    Response& html(const char* markup) {
         native_response_->setBody(markup);
         native_response_->addHeader("Content-Type", "text/html; charset=utf-8");
         sent_ = true;
@@ -85,10 +103,7 @@ public:
     }
 
     Response& json(const Json::Value& value) {
-        Json::StreamWriterBuilder builder;
-        builder["indentation"] = "";
-        native_response_->setBody(Json::writeString(builder, value));
-        native_response_->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+        native_response_ = drogon::HttpResponse::newHttpJsonResponse(value);
         sent_ = true;
         return *this;
     }

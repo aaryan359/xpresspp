@@ -40,13 +40,13 @@ features:
 
 Xpress++ delivers **C++ speed with Express simplicity**. Here is how Xpress++ performs in a comparative benchmark against Go, Rust, Node.js (Express), and Python (FastAPI) on a standard 8-core CPU (handling 200 concurrent connections, 4 threads, using `wrk`).
 
-| Framework | Language | Requests / Sec | Avg Latency | Relative Speed |
-| :--- | :--- | :--- | :--- | :--- |
-| **Rust (Axum)** | Rust | **346,873** | **0.40 ms** | **2.6x** |
-| **Go (net/http)** | Go | **209,513** | **0.98 ms** | **1.6x** |
-| **Xpress++** | C++20 | **132,828** | **1.43 ms** | **1.0x (Baseline)** |
-| **FastAPI** | Python | **47,230** | **4.23 ms** | **2.8x Slower** |
-| **Express** | JavaScript | **38,028** | **9.83 ms** | **3.5x Slower** |
+| Framework | Language | Requests / Sec | Avg Latency | Tail Latency (P99) | Peak RAM |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Rust (Axum)** | Rust | **503,412** | **0.77 ms** | **2.67 ms** | **15.2 MB** |
+| **Go (net/http)** | Go | **307,879** | **1.90 ms** | **10.26 ms** | **31.5 MB** |
+| **Xpress++** | C++20 | **240,066** | **1.89 ms** | **8.37 ms** | **19.3 MB** |
+| **Express (Node.js)** | JavaScript | **129,552** | **3.52 ms** | **15.38 ms** | **1398.7 MB** |
+| **FastAPI** | Python | **63,582** | **6.47 ms** | **19.99 ms** | **786.7 MB** |
 
 ::: tip Why is Xpress++ so fast?
 Xpress++ compiles to a native binary using Drogon's non-blocking, asynchronous I/O model and thread-pool-based event loop. It delivers high throughput and extremely low latencies, outperforming standard JS/Python frameworks by **300%+** while keeping resource usage minimal.

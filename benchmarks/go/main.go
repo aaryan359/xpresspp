@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"runtime"
 )
 
 type Message struct {
@@ -10,6 +11,9 @@ type Message struct {
 }
 
 func main() {
+	// Explicitly utilize all available CPU cores for the Go runtime
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
 	http.HandleFunc("/json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(Message{Message: "Hello World"})

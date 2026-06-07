@@ -1,3 +1,0 @@
-/home/aaryan/Desktop/xpress++/templates/default_app/build/CMakeFiles/xpresspp_app.dir
-/home/aaryan/Desktop/xpress++/templates/default_app/build/CMakeFiles/edit_cache.dir
-/home/aaryan/Desktop/xpress++/templates/default_app/build/CMakeFiles/rebuild_cache.dir

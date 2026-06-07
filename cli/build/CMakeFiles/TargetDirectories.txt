@@ -1,3 +1,0 @@
-/home/aaryan/Desktop/xpress++/cli/build/CMakeFiles/xp.dir
-/home/aaryan/Desktop/xpress++/cli/build/CMakeFiles/edit_cache.dir
-/home/aaryan/Desktop/xpress++/cli/build/CMakeFiles/rebuild_cache.dir

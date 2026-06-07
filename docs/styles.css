@@ -30,12 +30,12 @@
   --vp-c-divider:  #e2e8f0;
 
   /* Code */
-  --vp-code-block-bg:              #0f172a;
-  --vp-code-block-color:           #e2e8f0;
-  --vp-code-line-highlight-color:  rgba(13, 148, 136, 0.14);
+  --vp-code-block-bg:              #f8fafc;
+  --vp-code-block-color:           #0f172a;
+  --vp-code-line-highlight-color:  rgba(13, 148, 136, 0.08);
   --vp-code-color:                 #0d9488;
   --vp-code-bg:                    #f0fdfa;
-  --vp-code-copy-code-hover-bg:    rgba(13,148,136,0.12);
+  --vp-code-copy-code-hover-bg:    rgba(13,148,136,0.06);
 
   /* Buttons */
   --vp-button-brand-bg:          #0f172a;

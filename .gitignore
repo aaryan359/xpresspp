@@ -9,6 +9,15 @@ CMakeCache.txt
 CMakeSettings.json
 *.cmake
 
+
+#benchmark envirnment
+
+venv/
+node_modules
+target
+uploads
+
+
 # Databases & SQLite
 *.db
 default.db

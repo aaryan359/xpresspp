@@ -8,6 +8,9 @@ set(CMAKE_DEPENDS_LANGUAGES
 
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
+  "/home/aaryan/Desktop/xpress++/cli/src/commands.cpp" "CMakeFiles/xp.dir/src/commands.cpp.o" "gcc" "CMakeFiles/xp.dir/src/commands.cpp.o.d"
+  "/home/aaryan/Desktop/xpress++/cli/src/common.cpp" "CMakeFiles/xp.dir/src/common.cpp.o" "gcc" "CMakeFiles/xp.dir/src/common.cpp.o.d"
+  "/home/aaryan/Desktop/xpress++/cli/src/diagnostics.cpp" "CMakeFiles/xp.dir/src/diagnostics.cpp.o" "gcc" "CMakeFiles/xp.dir/src/diagnostics.cpp.o.d"
   "/home/aaryan/Desktop/xpress++/cli/src/main.cpp" "CMakeFiles/xp.dir/src/main.cpp.o" "gcc" "CMakeFiles/xp.dir/src/main.cpp.o.d"
   )
 

@@ -83,17 +83,65 @@ CMakeFiles/xp.dir/src/main.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/xp.dir/src/main.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/aaryan/Desktop/xpress++/cli/src/main.cpp -o CMakeFiles/xp.dir/src/main.cpp.s
 
+CMakeFiles/xp.dir/src/common.cpp.o: CMakeFiles/xp.dir/flags.make
+CMakeFiles/xp.dir/src/common.cpp.o: /home/aaryan/Desktop/xpress++/cli/src/common.cpp
+CMakeFiles/xp.dir/src/common.cpp.o: CMakeFiles/xp.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/aaryan/Desktop/xpress++/cli/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Building CXX object CMakeFiles/xp.dir/src/common.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/xp.dir/src/common.cpp.o -MF CMakeFiles/xp.dir/src/common.cpp.o.d -o CMakeFiles/xp.dir/src/common.cpp.o -c /home/aaryan/Desktop/xpress++/cli/src/common.cpp
+
+CMakeFiles/xp.dir/src/common.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/xp.dir/src/common.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/aaryan/Desktop/xpress++/cli/src/common.cpp > CMakeFiles/xp.dir/src/common.cpp.i
+
+CMakeFiles/xp.dir/src/common.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/xp.dir/src/common.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/aaryan/Desktop/xpress++/cli/src/common.cpp -o CMakeFiles/xp.dir/src/common.cpp.s
+
+CMakeFiles/xp.dir/src/diagnostics.cpp.o: CMakeFiles/xp.dir/flags.make
+CMakeFiles/xp.dir/src/diagnostics.cpp.o: /home/aaryan/Desktop/xpress++/cli/src/diagnostics.cpp
+CMakeFiles/xp.dir/src/diagnostics.cpp.o: CMakeFiles/xp.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/aaryan/Desktop/xpress++/cli/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building CXX object CMakeFiles/xp.dir/src/diagnostics.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/xp.dir/src/diagnostics.cpp.o -MF CMakeFiles/xp.dir/src/diagnostics.cpp.o.d -o CMakeFiles/xp.dir/src/diagnostics.cpp.o -c /home/aaryan/Desktop/xpress++/cli/src/diagnostics.cpp
+
+CMakeFiles/xp.dir/src/diagnostics.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/xp.dir/src/diagnostics.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/aaryan/Desktop/xpress++/cli/src/diagnostics.cpp > CMakeFiles/xp.dir/src/diagnostics.cpp.i
+
+CMakeFiles/xp.dir/src/diagnostics.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/xp.dir/src/diagnostics.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/aaryan/Desktop/xpress++/cli/src/diagnostics.cpp -o CMakeFiles/xp.dir/src/diagnostics.cpp.s
+
+CMakeFiles/xp.dir/src/commands.cpp.o: CMakeFiles/xp.dir/flags.make
+CMakeFiles/xp.dir/src/commands.cpp.o: /home/aaryan/Desktop/xpress++/cli/src/commands.cpp
+CMakeFiles/xp.dir/src/commands.cpp.o: CMakeFiles/xp.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/aaryan/Desktop/xpress++/cli/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building CXX object CMakeFiles/xp.dir/src/commands.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/xp.dir/src/commands.cpp.o -MF CMakeFiles/xp.dir/src/commands.cpp.o.d -o CMakeFiles/xp.dir/src/commands.cpp.o -c /home/aaryan/Desktop/xpress++/cli/src/commands.cpp
+
+CMakeFiles/xp.dir/src/commands.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/xp.dir/src/commands.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/aaryan/Desktop/xpress++/cli/src/commands.cpp > CMakeFiles/xp.dir/src/commands.cpp.i
+
+CMakeFiles/xp.dir/src/commands.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/xp.dir/src/commands.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/aaryan/Desktop/xpress++/cli/src/commands.cpp -o CMakeFiles/xp.dir/src/commands.cpp.s
+
 # Object files for target xp
 xp_OBJECTS = \
-"CMakeFiles/xp.dir/src/main.cpp.o"
+"CMakeFiles/xp.dir/src/main.cpp.o" \
+"CMakeFiles/xp.dir/src/common.cpp.o" \
+"CMakeFiles/xp.dir/src/diagnostics.cpp.o" \
+"CMakeFiles/xp.dir/src/commands.cpp.o"
 
 # External object files for target xp
 xp_EXTERNAL_OBJECTS =
 
 xp: CMakeFiles/xp.dir/src/main.cpp.o
+xp: CMakeFiles/xp.dir/src/common.cpp.o
+xp: CMakeFiles/xp.dir/src/diagnostics.cpp.o
+xp: CMakeFiles/xp.dir/src/commands.cpp.o
 xp: CMakeFiles/xp.dir/build.make
 xp: CMakeFiles/xp.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/home/aaryan/Desktop/xpress++/cli/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Linking CXX executable xp"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/home/aaryan/Desktop/xpress++/cli/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Linking CXX executable xp"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/xp.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.

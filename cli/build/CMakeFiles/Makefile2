@@ -81,12 +81,12 @@ clean: CMakeFiles/xp.dir/clean
 CMakeFiles/xp.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/xp.dir/build.make CMakeFiles/xp.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/xp.dir/build.make CMakeFiles/xp.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/aaryan/Desktop/xpress++/cli/build/CMakeFiles --progress-num=1,2 "Built target xp"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/aaryan/Desktop/xpress++/cli/build/CMakeFiles --progress-num=1,2,3,4,5 "Built target xp"
 .PHONY : CMakeFiles/xp.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/xp.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/aaryan/Desktop/xpress++/cli/build/CMakeFiles 2
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/aaryan/Desktop/xpress++/cli/build/CMakeFiles 5
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/xp.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/aaryan/Desktop/xpress++/cli/build/CMakeFiles 0
 .PHONY : CMakeFiles/xp.dir/rule

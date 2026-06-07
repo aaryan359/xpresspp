@@ -1,0 +1,19 @@
+
+  ╔═══════════════════════════════════╗
+  ║        xpress++  is ready         ║
+  ╚═══════════════════════════════════╝
+
+  Listening on  http://localhost:8085
+  Environment  development
+
+  Press Ctrl+C to stop.
+
+
+[Test Suite] Initializing in-memory integration tests...
+
+✓ Test 1 Passed: Declarative validation succeeded with valid input.
+✓ Test 2 Passed: Declarative validation caught invalid field type.
+✓ Test 3 Passed: C++20 coroutine route handler and DB integration verified successfully.
+
+[Test Suite] All integration tests successfully passed!
+

@@ -129,6 +129,78 @@ xp/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/xp.dir/build.make CMakeFiles/xp.dir/build
 .PHONY : xp/fast
 
+src/commands.o: src/commands.cpp.o
+.PHONY : src/commands.o
+
+# target to build an object file
+src/commands.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/xp.dir/build.make CMakeFiles/xp.dir/src/commands.cpp.o
+.PHONY : src/commands.cpp.o
+
+src/commands.i: src/commands.cpp.i
+.PHONY : src/commands.i
+
+# target to preprocess a source file
+src/commands.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/xp.dir/build.make CMakeFiles/xp.dir/src/commands.cpp.i
+.PHONY : src/commands.cpp.i
+
+src/commands.s: src/commands.cpp.s
+.PHONY : src/commands.s
+
+# target to generate assembly for a file
+src/commands.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/xp.dir/build.make CMakeFiles/xp.dir/src/commands.cpp.s
+.PHONY : src/commands.cpp.s
+
+src/common.o: src/common.cpp.o
+.PHONY : src/common.o
+
+# target to build an object file
+src/common.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/xp.dir/build.make CMakeFiles/xp.dir/src/common.cpp.o
+.PHONY : src/common.cpp.o
+
+src/common.i: src/common.cpp.i
+.PHONY : src/common.i
+
+# target to preprocess a source file
+src/common.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/xp.dir/build.make CMakeFiles/xp.dir/src/common.cpp.i
+.PHONY : src/common.cpp.i
+
+src/common.s: src/common.cpp.s
+.PHONY : src/common.s
+
+# target to generate assembly for a file
+src/common.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/xp.dir/build.make CMakeFiles/xp.dir/src/common.cpp.s
+.PHONY : src/common.cpp.s
+
+src/diagnostics.o: src/diagnostics.cpp.o
+.PHONY : src/diagnostics.o
+
+# target to build an object file
+src/diagnostics.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/xp.dir/build.make CMakeFiles/xp.dir/src/diagnostics.cpp.o
+.PHONY : src/diagnostics.cpp.o
+
+src/diagnostics.i: src/diagnostics.cpp.i
+.PHONY : src/diagnostics.i
+
+# target to preprocess a source file
+src/diagnostics.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/xp.dir/build.make CMakeFiles/xp.dir/src/diagnostics.cpp.i
+.PHONY : src/diagnostics.cpp.i
+
+src/diagnostics.s: src/diagnostics.cpp.s
+.PHONY : src/diagnostics.s
+
+# target to generate assembly for a file
+src/diagnostics.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/xp.dir/build.make CMakeFiles/xp.dir/src/diagnostics.cpp.s
+.PHONY : src/diagnostics.cpp.s
+
 src/main.o: src/main.cpp.o
 .PHONY : src/main.o
 
@@ -162,6 +234,15 @@ help:
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
 	@echo "... xp"
+	@echo "... src/commands.o"
+	@echo "... src/commands.i"
+	@echo "... src/commands.s"
+	@echo "... src/common.o"
+	@echo "... src/common.i"
+	@echo "... src/common.s"
+	@echo "... src/diagnostics.o"
+	@echo "... src/diagnostics.i"
+	@echo "... src/diagnostics.s"
 	@echo "... src/main.o"
 	@echo "... src/main.i"
 	@echo "... src/main.s"

@@ -3,6 +3,7 @@
 #include "request.h"
 #include "response.h"
 
+#include <drogon/utils/coroutine.h>
 #include <functional>
 #include <cctype>
 #include <initializer_list>
@@ -11,10 +12,15 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <variant>
+#include <type_traits>
 
 namespace xp {
 
-using Handler = std::function<void(Request&, Response&)>;
+using Task = drogon::Task<void>;
+using SyncHandler = std::function<void(Request&, Response&)>;
+using CoroHandler = std::function<Task(Request&, Response&)>;
+using Handler = std::variant<SyncHandler, CoroHandler>;
 using Next = std::function<void()>;
 using Middleware = std::function<void(Request&, Response&, Next)>;
 
@@ -127,10 +133,18 @@ public:
         return *this;
     }
 
+    template <typename H>
     void add(const std::string& method,
              const std::string& path,
-             Handler handler,
+             H&& handler,
              std::vector<Middleware> middleware = {}) {
+        Handler target;
+        if constexpr (std::is_invocable_r_v<Task, H, Request&, Response&>) {
+            target = CoroHandler(std::forward<H>(handler));
+        } else {
+            target = SyncHandler(std::forward<H>(handler));
+        }
+
         std::vector<std::string> param_names;
         routes_.push_back(Route{
             method,
@@ -138,33 +152,50 @@ public:
             compilePath(path, param_names, case_sensitive_, strict_trailing_slash_),
             std::move(param_names),
             std::move(middleware),
-            std::move(handler)
+            std::move(target)
         });
     }
 
     void use(const std::string& prefix, const Router& router) {
         for (const auto& route : router.routes_) {
-            add(route.method, joinPaths(prefix, route.path), route.handler, route.middleware);
+            std::vector<std::string> param_names;
+            routes_.push_back(Route{
+                route.method,
+                joinPaths(prefix, route.path),
+                compilePath(joinPaths(prefix, route.path), param_names, case_sensitive_, strict_trailing_slash_),
+                std::move(param_names),
+                route.middleware,
+                route.handler
+            });
         }
     }
 
-    void get(const std::string& path, Handler handler) { add("GET", path, std::move(handler)); }
-    void post(const std::string& path, Handler handler) { add("POST", path, std::move(handler)); }
-    void put(const std::string& path, Handler handler) { add("PUT", path, std::move(handler)); }
-    void patch(const std::string& path, Handler handler) { add("PATCH", path, std::move(handler)); }
-    void del(const std::string& path, Handler handler) { add("DELETE", path, std::move(handler)); }
-    void options(const std::string& path, Handler handler) { add("OPTIONS", path, std::move(handler)); }
-    void head(const std::string& path, Handler handler) { add("HEAD", path, std::move(handler)); }
-    void all(const std::string& path, Handler handler) { add("*", path, std::move(handler)); }
+    template <typename H> void get(const std::string& path, H&& handler) { add("GET", path, std::forward<H>(handler)); }
+    template <typename H> void post(const std::string& path, H&& handler) { add("POST", path, std::forward<H>(handler)); }
+    template <typename H> void put(const std::string& path, H&& handler) { add("PUT", path, std::forward<H>(handler)); }
+    template <typename H> void patch(const std::string& path, H&& handler) { add("PATCH", path, std::forward<H>(handler)); }
+    template <typename H> void del(const std::string& path, H&& handler) { add("DELETE", path, std::forward<H>(handler)); }
+    template <typename H> void options(const std::string& path, H&& handler) { add("OPTIONS", path, std::forward<H>(handler)); }
+    template <typename H> void head(const std::string& path, H&& handler) { add("HEAD", path, std::forward<H>(handler)); }
+    template <typename H> void all(const std::string& path, H&& handler) { add("*", path, std::forward<H>(handler)); }
 
-    void get(const std::string& path, std::vector<Middleware> middleware, Handler handler) { add("GET", path, std::move(handler), std::move(middleware)); }
-    void post(const std::string& path, std::vector<Middleware> middleware, Handler handler) { add("POST", path, std::move(handler), std::move(middleware)); }
-    void put(const std::string& path, std::vector<Middleware> middleware, Handler handler) { add("PUT", path, std::move(handler), std::move(middleware)); }
-    void patch(const std::string& path, std::vector<Middleware> middleware, Handler handler) { add("PATCH", path, std::move(handler), std::move(middleware)); }
-    void del(const std::string& path, std::vector<Middleware> middleware, Handler handler) { add("DELETE", path, std::move(handler), std::move(middleware)); }
-    void options(const std::string& path, std::vector<Middleware> middleware, Handler handler) { add("OPTIONS", path, std::move(handler), std::move(middleware)); }
-    void head(const std::string& path, std::vector<Middleware> middleware, Handler handler) { add("HEAD", path, std::move(handler), std::move(middleware)); }
-    void all(const std::string& path, std::vector<Middleware> middleware, Handler handler) { add("*", path, std::move(handler), std::move(middleware)); }
+    template <typename H> void get(const std::string& path, Middleware middleware, H&& handler) { add("GET", path, std::forward<H>(handler), std::vector<Middleware>{std::move(middleware)}); }
+    template <typename H> void post(const std::string& path, Middleware middleware, H&& handler) { add("POST", path, std::forward<H>(handler), std::vector<Middleware>{std::move(middleware)}); }
+    template <typename H> void put(const std::string& path, Middleware middleware, H&& handler) { add("PUT", path, std::forward<H>(handler), std::vector<Middleware>{std::move(middleware)}); }
+    template <typename H> void patch(const std::string& path, Middleware middleware, H&& handler) { add("PATCH", path, std::forward<H>(handler), std::vector<Middleware>{std::move(middleware)}); }
+    template <typename H> void del(const std::string& path, Middleware middleware, H&& handler) { add("DELETE", path, std::forward<H>(handler), std::vector<Middleware>{std::move(middleware)}); }
+    template <typename H> void options(const std::string& path, Middleware middleware, H&& handler) { add("OPTIONS", path, std::forward<H>(handler), std::vector<Middleware>{std::move(middleware)}); }
+    template <typename H> void head(const std::string& path, Middleware middleware, H&& handler) { add("HEAD", path, std::forward<H>(handler), std::vector<Middleware>{std::move(middleware)}); }
+    template <typename H> void all(const std::string& path, Middleware middleware, H&& handler) { add("*", path, std::forward<H>(handler), std::vector<Middleware>{std::move(middleware)}); }
+
+    template <typename H> void get(const std::string& path, std::vector<Middleware> middleware, H&& handler) { add("GET", path, std::forward<H>(handler), std::move(middleware)); }
+    template <typename H> void post(const std::string& path, std::vector<Middleware> middleware, H&& handler) { add("POST", path, std::forward<H>(handler), std::move(middleware)); }
+    template <typename H> void put(const std::string& path, std::vector<Middleware> middleware, H&& handler) { add("PUT", path, std::forward<H>(handler), std::move(middleware)); }
+    template <typename H> void patch(const std::string& path, std::vector<Middleware> middleware, H&& handler) { add("PATCH", path, std::forward<H>(handler), std::move(middleware)); }
+    template <typename H> void del(const std::string& path, std::vector<Middleware> middleware, H&& handler) { add("DELETE", path, std::forward<H>(handler), std::move(middleware)); }
+    template <typename H> void options(const std::string& path, std::vector<Middleware> middleware, H&& handler) { add("OPTIONS", path, std::forward<H>(handler), std::move(middleware)); }
+    template <typename H> void head(const std::string& path, std::vector<Middleware> middleware, H&& handler) { add("HEAD", path, std::forward<H>(handler), std::move(middleware)); }
+    template <typename H> void all(const std::string& path, std::vector<Middleware> middleware, H&& handler) { add("*", path, std::forward<H>(handler), std::move(middleware)); }
 
     RouteMatch match(const std::string& method, const std::string& path) const {
         for (const auto& route : routes_) {

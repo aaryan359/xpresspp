@@ -4,6 +4,7 @@
 CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/default_app/main.cpp \
   /home/aaryan/Desktop/xpress++/core/include/xpresspp/app.h \
   /home/aaryan/Desktop/xpress++/core/include/xpresspp/config.h \
+  /home/aaryan/Desktop/xpress++/core/include/xpresspp/database.h \
   /home/aaryan/Desktop/xpress++/core/include/xpresspp/errors.h \
   /home/aaryan/Desktop/xpress++/core/include/xpresspp/logger.h \
   /home/aaryan/Desktop/xpress++/core/include/xpresspp/middleware/auth.h \
@@ -18,6 +19,7 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
   /home/aaryan/Desktop/xpress++/core/include/xpresspp/request.h \
   /home/aaryan/Desktop/xpress++/core/include/xpresspp/response.h \
   /home/aaryan/Desktop/xpress++/core/include/xpresspp/router.h \
+  /home/aaryan/Desktop/xpress++/core/include/xpresspp/test.h \
   /home/aaryan/Desktop/xpress++/core/include/xpresspp/utils.h \
   /home/aaryan/Desktop/xpress++/core/include/xpresspp/xpresspp.h \
   /usr/include/alloca.h \
@@ -234,6 +236,7 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
   /usr/include/c++/13/sstream \
   /usr/include/c++/13/stack \
   /usr/include/c++/13/stdexcept \
+  /usr/include/c++/13/stdlib.h \
   /usr/include/c++/13/stop_token \
   /usr/include/c++/13/streambuf \
   /usr/include/c++/13/string \
@@ -271,6 +274,33 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
   /usr/include/linux/stddef.h \
   /usr/include/locale.h \
   /usr/include/netinet/in.h \
+  /usr/include/openssl/asn1.h \
+  /usr/include/openssl/asn1err.h \
+  /usr/include/openssl/bio.h \
+  /usr/include/openssl/bioerr.h \
+  /usr/include/openssl/bn.h \
+  /usr/include/openssl/bnerr.h \
+  /usr/include/openssl/buffer.h \
+  /usr/include/openssl/buffererr.h \
+  /usr/include/openssl/core.h \
+  /usr/include/openssl/core_dispatch.h \
+  /usr/include/openssl/crypto.h \
+  /usr/include/openssl/cryptoerr.h \
+  /usr/include/openssl/cryptoerr_legacy.h \
+  /usr/include/openssl/e_os2.h \
+  /usr/include/openssl/evp.h \
+  /usr/include/openssl/evperr.h \
+  /usr/include/openssl/hmac.h \
+  /usr/include/openssl/macros.h \
+  /usr/include/openssl/obj_mac.h \
+  /usr/include/openssl/objects.h \
+  /usr/include/openssl/objectserr.h \
+  /usr/include/openssl/opensslv.h \
+  /usr/include/openssl/params.h \
+  /usr/include/openssl/safestack.h \
+  /usr/include/openssl/stack.h \
+  /usr/include/openssl/symhacks.h \
+  /usr/include/openssl/types.h \
   /usr/include/pthread.h \
   /usr/include/sched.h \
   /usr/include/semaphore.h \
@@ -391,6 +421,8 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
   /usr/include/x86_64-linux-gnu/c++/13/bits/time_members.h \
   /usr/include/x86_64-linux-gnu/gnu/stubs-64.h \
   /usr/include/x86_64-linux-gnu/gnu/stubs.h \
+  /usr/include/x86_64-linux-gnu/openssl/configuration.h \
+  /usr/include/x86_64-linux-gnu/openssl/opensslconf.h \
   /usr/include/x86_64-linux-gnu/sys/cdefs.h \
   /usr/include/x86_64-linux-gnu/sys/select.h \
   /usr/include/x86_64-linux-gnu/sys/single_threaded.h \
@@ -535,8 +567,6 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 
 /usr/local/include/drogon/nosql/RedisClient.h:
 
-/usr/local/include/drogon/Session.h:
-
 /usr/local/include/drogon/RequestStream.h:
 
 /usr/local/include/drogon/RateLimiter.h:
@@ -573,6 +603,10 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 
 /usr/include/x86_64-linux-gnu/sys/cdefs.h:
 
+/usr/include/x86_64-linux-gnu/openssl/opensslconf.h:
+
+/usr/include/x86_64-linux-gnu/openssl/configuration.h:
+
 /usr/include/x86_64-linux-gnu/gnu/stubs.h:
 
 /usr/include/x86_64-linux-gnu/c++/13/bits/os_defines.h:
@@ -595,10 +629,6 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 
 /usr/include/x86_64-linux-gnu/c++/13/bits/c++config.h:
 
-/usr/local/include/trantor/utils/LockFreeQueue.h:
-
-/usr/include/x86_64-linux-gnu/c++/13/bits/c++allocator.h:
-
 /usr/include/x86_64-linux-gnu/c++/13/bits/basic_file.h:
 
 /usr/include/x86_64-linux-gnu/bits/xopen_lim.h:
@@ -610,12 +640,6 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 /usr/local/include/drogon/MultiPart.h:
 
 /usr/include/x86_64-linux-gnu/bits/wctype-wchar.h:
-
-/usr/local/include/drogon/drogon_callbacks.h:
-
-/usr/local/include/drogon/NotFound.h:
-
-/usr/include/x86_64-linux-gnu/bits/wchar.h:
 
 /usr/include/x86_64-linux-gnu/bits/waitflags.h:
 
@@ -652,8 +676,6 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 /usr/include/x86_64-linux-gnu/bits/types/__fpos_t.h:
 
 /usr/include/x86_64-linux-gnu/bits/types/__fpos64_t.h:
-
-/usr/include/x86_64-linux-gnu/bits/types/FILE.h:
 
 /usr/include/x86_64-linux-gnu/bits/types.h:
 
@@ -761,6 +783,48 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 
 /usr/include/pthread.h:
 
+/usr/local/include/drogon/drogon_callbacks.h:
+
+/usr/local/include/drogon/NotFound.h:
+
+/usr/include/x86_64-linux-gnu/bits/wchar.h:
+
+/usr/include/openssl/types.h:
+
+/usr/include/openssl/safestack.h:
+
+/usr/include/openssl/params.h:
+
+/usr/include/openssl/evperr.h:
+
+/usr/include/openssl/e_os2.h:
+
+/usr/local/include/drogon/Session.h:
+
+/usr/include/openssl/cryptoerr_legacy.h:
+
+/usr/include/openssl/crypto.h:
+
+/usr/include/x86_64-linux-gnu/bits/types/FILE.h:
+
+/usr/include/openssl/core_dispatch.h:
+
+/usr/include/openssl/core.h:
+
+/usr/include/openssl/bnerr.h:
+
+/usr/local/include/trantor/utils/LockFreeQueue.h:
+
+/usr/include/x86_64-linux-gnu/c++/13/bits/c++allocator.h:
+
+/usr/include/openssl/bn.h:
+
+/usr/include/openssl/bio.h:
+
+/usr/include/openssl/asn1err.h:
+
+/usr/include/openssl/asn1.h:
+
 /usr/local/include/drogon/orm/SqlBinder.h:
 
 /usr/include/netinet/in.h:
@@ -777,15 +841,11 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 
 /usr/include/jsoncpp/json/reader.h:
 
-/usr/include/c++/13/bits/sstream.tcc:
+/usr/include/jsoncpp/json/json_features.h:
 
-/usr/include/x86_64-linux-gnu/asm/posix_types.h:
+/usr/include/jsoncpp/json/json.h:
 
-/usr/include/c++/13/cwctype:
-
-/usr/include/linux/limits.h:
-
-/usr/include/c++/13/ratio:
+/usr/include/jsoncpp/json/forwards.h:
 
 /usr/include/c++/13/bits/shared_ptr.h:
 
@@ -811,16 +871,6 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 
 /usr/include/c++/13/bits/regex_executor.tcc:
 
-/usr/include/c++/13/bits/postypes.h:
-
-/usr/include/c++/13/bits/stl_multiset.h:
-
-/usr/include/c++/13/bits/uses_allocator.h:
-
-/usr/include/strings.h:
-
-/usr/include/c++/13/iomanip:
-
 /usr/include/c++/13/bits/quoted_string.h:
 
 /usr/include/c++/13/bits/unordered_map.h:
@@ -830,6 +880,8 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 /usr/include/c++/13/bits/new_allocator.h:
 
 /usr/include/c++/13/bits/atomic_base.h:
+
+/usr/include/openssl/buffer.h:
 
 /usr/include/c++/13/bits/uses_allocator_args.h:
 
@@ -847,15 +899,15 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 
 /usr/include/c++/13/bits/ranges_uninitialized.h:
 
-/usr/include/c++/13/bits/std_abs.h:
-
-/usr/include/c++/13/bits/parse_numbers.h:
+/usr/include/openssl/evp.h:
 
 /usr/include/c++/13/bits/ostream.tcc:
 
 /usr/include/c++/13/numbers:
 
 /usr/include/c++/13/bits/move.h:
+
+/usr/include/openssl/bioerr.h:
 
 /usr/include/asm-generic/sockios.h:
 
@@ -864,6 +916,20 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 /usr/include/stdint.h:
 
 /usr/include/endian.h:
+
+/usr/include/c++/13/bits/postypes.h:
+
+/usr/include/c++/13/bits/parse_numbers.h:
+
+/usr/include/c++/13/bits/std_abs.h:
+
+/usr/include/c++/13/bits/stl_multiset.h:
+
+/usr/include/c++/13/bits/uses_allocator.h:
+
+/usr/include/strings.h:
+
+/usr/include/c++/13/iomanip:
 
 /usr/include/c++/13/bits/locale_facets_nonio.tcc:
 
@@ -878,6 +944,8 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 /usr/include/x86_64-linux-gnu/bits/timesize.h:
 
 /usr/include/c++/13/bits/locale_classes.h:
+
+/usr/include/openssl/macros.h:
 
 /usr/include/c++/13/bits/fs_ops.h:
 
@@ -945,6 +1013,26 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 
 /usr/include/c++/13/bits/enable_special_members.h:
 
+/usr/include/c++/13/bits/deque.tcc:
+
+/usr/include/c++/13/bits/hashtable_policy.h:
+
+/usr/include/c++/13/bits/exception.h:
+
+/usr/include/openssl/hmac.h:
+
+/usr/include/c++/13/bits/memory_resource.h:
+
+/usr/include/c++/13/streambuf:
+
+/usr/local/include/drogon/UploadFile.h:
+
+/usr/include/c++/13/bits/cxxabi_init_exception.h:
+
+/usr/include/x86_64-linux-gnu/c++/13/bits/c++io.h:
+
+/usr/include/c++/13/typeinfo:
+
 /usr/include/x86_64-linux-gnu/bits/types/struct_sched_param.h:
 
 /usr/include/asm-generic/errno.h:
@@ -963,10 +1051,6 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 
 /home/aaryan/Desktop/xpress++/core/include/xpresspp/middleware/security.h:
 
-/usr/include/x86_64-linux-gnu/bits/endianness.h:
-
-/usr/include/c++/13/bits/chrono.h:
-
 /usr/local/include/drogon/HttpBinder.h:
 
 /usr/include/x86_64-linux-gnu/c++/13/bits/time_members.h:
@@ -981,11 +1065,33 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 
 /usr/include/c++/13/bits/range_access.h:
 
+/home/aaryan/Desktop/xpress++/core/include/xpresspp/database.h:
+
 /usr/include/c++/13/bits/regex.h:
 
 /usr/local/include/drogon/utils/monitoring/Sample.h:
 
 /usr/include/c++/13/bits/stl_bvector.h:
+
+/usr/include/alloca.h:
+
+/usr/include/x86_64-linux-gnu/bits/types/time_t.h:
+
+/home/aaryan/Desktop/xpress++/core/include/xpresspp/errors.h:
+
+/home/aaryan/Desktop/xpress++/core/include/xpresspp/middleware/session.h:
+
+/usr/include/c++/13/bits/ios_base.h:
+
+/usr/include/x86_64-linux-gnu/bits/types/timer_t.h:
+
+/usr/include/c++/13/bits/regex_compiler.tcc:
+
+/usr/local/include/drogon/CacheMap.h:
+
+/usr/include/c++/13/bits/allocator.h:
+
+/usr/include/c++/13/unordered_map:
 
 /usr/include/x86_64-linux-gnu/c++/13/bits/ctype_base.h:
 
@@ -1005,11 +1111,21 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 
 /usr/include/x86_64-linux-gnu/bits/stdlib-float.h:
 
+/usr/include/openssl/opensslv.h:
+
 /usr/include/c++/13/condition_variable:
 
 /usr/include/c++/13/iosfwd:
 
 /usr/include/c++/13/bits/erase_if.h:
+
+/usr/include/c++/13/bits/basic_string.tcc:
+
+/home/aaryan/Desktop/xpress++/templates/default_app/main.cpp:
+
+/usr/include/c++/13/pstl/pstl_config.h:
+
+/usr/include/c++/13/bits/regex_automaton.h:
 
 /usr/include/c++/13/bits/exception_ptr.h:
 
@@ -1023,21 +1139,7 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 
 /usr/include/c++/13/bits/atomic_futex.h:
 
-/usr/include/c++/13/bits/ios_base.h:
-
 /home/aaryan/Desktop/xpress++/core/include/xpresspp/response.h:
-
-/usr/include/x86_64-linux-gnu/bits/types/time_t.h:
-
-/home/aaryan/Desktop/xpress++/core/include/xpresspp/middleware/session.h:
-
-/home/aaryan/Desktop/xpress++/core/include/xpresspp/errors.h:
-
-/usr/include/alloca.h:
-
-/home/aaryan/Desktop/xpress++/templates/default_app/main.cpp:
-
-/usr/include/c++/13/bits/basic_string.tcc:
 
 /usr/include/x86_64-linux-gnu/bits/types/sigset_t.h:
 
@@ -1057,6 +1159,10 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 
 /usr/include/c++/13/bits/cxxabi_forced.h:
 
+/usr/include/x86_64-linux-gnu/bits/endianness.h:
+
+/usr/include/c++/13/bits/chrono.h:
+
 /usr/local/include/trantor/utils/MsgBuffer.h:
 
 /home/aaryan/Desktop/xpress++/core/include/xpresspp/logger.h:
@@ -1072,12 +1178,6 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 /usr/include/x86_64-linux-gnu/asm/unistd_64.h:
 
 /home/aaryan/Desktop/xpress++/core/include/xpresspp/middleware/auth.h:
-
-/home/aaryan/Desktop/xpress++/core/include/xpresspp/middleware/body_limit.h:
-
-/usr/local/include/trantor/utils/AsyncFileLogger.h:
-
-/usr/include/c++/13/algorithm:
 
 /home/aaryan/Desktop/xpress++/core/include/xpresspp/request.h:
 
@@ -1103,25 +1203,21 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 
 /usr/include/asm-generic/posix_types.h:
 
-/usr/include/x86_64-linux-gnu/bits/types/timer_t.h:
-
-/usr/include/c++/13/bits/regex_compiler.tcc:
-
-/usr/local/include/drogon/CacheMap.h:
-
-/usr/include/c++/13/bits/allocator.h:
-
-/usr/include/c++/13/unordered_map:
-
 /usr/include/c++/13/bits/basic_ios.h:
 
 /usr/include/c++/13/bits/regex_error.h:
 
 /home/aaryan/Desktop/xpress++/core/include/xpresspp/middleware/rate_limit.h:
 
+/usr/include/c++/13/backward/auto_ptr.h:
+
 /usr/include/assert.h:
 
-/usr/include/c++/13/backward/auto_ptr.h:
+/home/aaryan/Desktop/xpress++/core/include/xpresspp/middleware/body_limit.h:
+
+/usr/local/include/trantor/utils/AsyncFileLogger.h:
+
+/usr/include/c++/13/algorithm:
 
 /usr/local/include/drogon/IOThreadStorage.h:
 
@@ -1135,6 +1231,8 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 
 /usr/include/c++/13/bits/alloc_traits.h:
 
+/usr/include/openssl/symhacks.h:
+
 /usr/include/c++/13/bits/concept_check.h:
 
 /usr/include/c++/13/bits/align.h:
@@ -1146,6 +1244,8 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 /usr/include/jsoncpp/json/version.h:
 
 /usr/include/c++/13/semaphore:
+
+/usr/include/openssl/stack.h:
 
 /usr/include/c++/13/bit:
 
@@ -1177,29 +1277,21 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 
 /usr/include/c++/13/stop_token:
 
-/usr/include/jsoncpp/json/json_features.h:
-
-/usr/include/c++/13/bits/hashtable_policy.h:
-
-/usr/include/c++/13/bits/deque.tcc:
-
 /usr/include/c++/13/cassert:
 
 /usr/include/c++/13/bits/cpp_type_traits.h:
 
-/usr/include/c++/13/bits/exception.h:
+/usr/include/c++/13/bits/sstream.tcc:
 
-/usr/include/c++/13/bits/memory_resource.h:
+/usr/include/x86_64-linux-gnu/asm/posix_types.h:
 
-/usr/include/c++/13/streambuf:
+/usr/include/openssl/cryptoerr.h:
 
-/usr/local/include/drogon/UploadFile.h:
+/usr/include/c++/13/cwctype:
 
-/usr/include/c++/13/bits/cxxabi_init_exception.h:
+/usr/include/linux/limits.h:
 
-/usr/include/x86_64-linux-gnu/c++/13/bits/c++io.h:
-
-/usr/include/c++/13/typeinfo:
+/usr/include/c++/13/ratio:
 
 /usr/include/x86_64-linux-gnu/c++/13/bits/ctype_inline.h:
 
@@ -1225,11 +1317,15 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 
 /usr/include/c++/13/regex:
 
+/home/aaryan/Desktop/xpress++/core/include/xpresspp/test.h:
+
 /usr/include/c++/13/bits/stl_algobase.h:
 
 /usr/local/include/drogon/plugins/RealIpResolver.h:
 
 /usr/include/c++/13/bits/stl_deque.h:
+
+/usr/include/openssl/buffererr.h:
 
 /usr/include/c++/13/bits/stl_function.h:
 
@@ -1315,6 +1411,8 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 
 /usr/include/c++/13/cerrno:
 
+/usr/include/openssl/obj_mac.h:
+
 /usr/include/c++/13/backward/binders.h:
 
 /usr/include/c++/13/charconv:
@@ -1369,6 +1467,8 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 
 /usr/include/x86_64-linux-gnu/bits/types/struct_timeval.h:
 
+/usr/include/openssl/objects.h:
+
 /usr/include/c++/13/bits/stl_iterator.h:
 
 /usr/include/c++/13/ext/numeric_traits.h:
@@ -1407,15 +1507,15 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 
 /usr/include/c++/13/pstl/glue_memory_defs.h:
 
-/usr/include/c++/13/bits/regex_automaton.h:
-
-/usr/include/c++/13/pstl/pstl_config.h:
-
 /usr/include/c++/13/queue:
+
+/usr/include/openssl/objectserr.h:
 
 /usr/include/c++/13/span:
 
 /usr/include/c++/13/stdexcept:
+
+/usr/include/c++/13/stdlib.h:
 
 /usr/include/x86_64-linux-gnu/bits/stdint-intn.h:
 
@@ -1444,7 +1544,3 @@ CMakeFiles/xpresspp_app.dir/main.cpp.o: /home/aaryan/Desktop/xpress++/templates/
 /usr/include/features.h:
 
 /usr/include/jsoncpp/json/config.h:
-
-/usr/include/jsoncpp/json/forwards.h:
-
-/usr/include/jsoncpp/json/json.h:

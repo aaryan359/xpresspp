@@ -4,5 +4,6 @@
 // compatibility.  All the actual typed error classes live in errors.h.
 #include "errors.h"
 
-// Nothing else needed here; xp::badRequest(), xp::notFound(), etc.
-// are already defined as [[noreturn]] inline functions in errors.h.
+// Express-like coroutine syntax sugar macros
+#define await co_await
+#define async -> ::xp::Task

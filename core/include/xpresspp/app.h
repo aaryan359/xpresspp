@@ -4,6 +4,7 @@
 #include "request.h"
 #include "response.h"
 #include "router.h"
+#include "database.h"
 
 #include <drogon/drogon.h>
 #include <json/json.h>
@@ -18,12 +19,56 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <memory>
+#include <variant>
+#include <type_traits>
+#include <future>
+#include <mutex>
+#include <condition_variable>
+
+#if defined(_WIN32)
+#include <io.h>
+#define isatty _isatty
+#define fileno _fileno
+#else
+#include <unistd.h>
+#endif
 
 namespace xp {
 
+class App;
+
+// ────────────────────────────────────────────────────────────
+//  RequestContext
+// ────────────────────────────────────────────────────────────
 using ErrorHandler = std::function<void(const std::exception&, Request&, Response&)>;
 using AfterHandler = std::function<void(Request&, Response&)>;
 using RouterBuilder = std::function<void(Router&)>;
+
+struct RequestContext {
+    Request req;
+    Response res;
+    std::vector<AfterHandler> after_handlers;
+    std::function<void(const drogon::HttpResponsePtr&)> callback;
+    bool finished = false;
+
+    RequestContext(const drogon::HttpRequestPtr& native_req,
+                   std::vector<AfterHandler> handlers,
+                   std::function<void(const drogon::HttpResponsePtr&)> cb)
+        : req(native_req), after_handlers(std::move(handlers)), callback(std::move(cb)) {}
+
+    void finish() {
+        if (finished) return;
+        finished = true;
+        for (const auto& handler : after_handlers) {
+            handler(req, res);
+        }
+        callback(res.native());
+    }
+};
+
+// Thread-local request context pointer to resolve async sub-routers
+inline thread_local std::shared_ptr<RequestContext> current_request_context = nullptr;
 
 // ────────────────────────────────────────────────────────────
 //  AppConfig
@@ -42,8 +87,7 @@ struct AppConfig {
 };
 
 // ────────────────────────────────────────────────────────────
-//  Internal ANSI helpers (duplicated minimally for app.h
-//  independence from logger.h)
+//  Internal ANSI helpers
 // ────────────────────────────────────────────────────────────
 namespace detail {
 inline bool appColorOk() {
@@ -125,9 +169,6 @@ private:
     };
     std::vector<StaticMount> static_mounts_;
 
-    // ──────────────────────────────────────────────────────
-    //  Helpers
-    // ──────────────────────────────────────────────────────
     static std::string trimTrailingSlash(std::string value) {
         while (value.size() > 1 && value.back() == '/') {
             value.pop_back();
@@ -167,23 +208,12 @@ private:
         return false;
     }
 
-    void runAfterHandlers(Request& req, Response& res) const {
-        for (const auto& handler : after_handlers_) {
-            handler(req, res);
-        }
-    }
-
-    // ──────────────────────────────────────────────────────
-    //  Error handling — converts any exception into a clean
-    //  JSON response with developer-friendly hints in debug.
-    // ──────────────────────────────────────────────────────
+public:
     void handleError(const std::exception& error, Request& req, Response& res) const {
-        // Delegate to user-supplied handler first
         if (error_handler_) {
             try {
                 error_handler_(error, req, res);
             } catch (const std::exception& inner) {
-                // The error handler itself threw — prevent infinite recursion
                 res.status(500);
                 Json::Value fallback;
                 fallback["status"]  = "error";
@@ -228,7 +258,6 @@ private:
             }
         }
 
-        // Also emit to stderr in debug so the dev sees it in the terminal
         if (debug_ && status_code >= 500) {
             std::cerr
                 << detail::appRed() << detail::appBold()
@@ -250,120 +279,166 @@ private:
         res.status(status_code).json(payload);
     }
 
-    // ──────────────────────────────────────────────────────
-    //  Middleware stack runner
-    // ──────────────────────────────────────────────────────
-    static void runMiddlewareStack(const std::vector<Middleware>& stack,
-                                   std::size_t                    index,
-                                   Request&                       req,
-                                   Response&                      res,
-                                   const Handler&                 final_handler) {
+private:
+    void runMiddlewareStack(const std::vector<Middleware>& stack,
+                            std::size_t                    index,
+                            std::shared_ptr<RequestContext> ctx,
+                            const std::function<void(std::shared_ptr<RequestContext>&)>& final_handler) {
         if (index >= stack.size()) {
-            final_handler(req, res);
+            final_handler(ctx);
             return;
         }
 
         bool next_called = false;
-        Next next = [&]() {
+        Next next = [this, stack, index, ctx, final_handler, &next_called]() {
             next_called = true;
-            runMiddlewareStack(stack, index + 1, req, res, final_handler);
+            runMiddlewareStack(stack, index + 1, ctx, final_handler);
         };
 
-        stack[index](req, res, next);
-
-        if (!next_called && !res.sent()) {
-            throw MiddlewareError(
-                "Middleware at index " + std::to_string(index) +
-                " finished without calling next() or sending a response.",
-                "Every middleware must either call next() to pass control "
-                "to the next middleware, or send a response "
-                "(res.json(...), res.send(...), etc.)."
+        try {
+            stack[index](ctx->req, ctx->res, next);
+        } catch (const std::exception& error) {
+            handleError(error, ctx->req, ctx->res);
+            ctx->finish();
+            return;
+        } catch (...) {
+            InternalError unknown(
+                "An unknown C++ exception escaped a middleware.",
+                "Ensure all thrown types derive from std::exception."
             );
+            handleError(unknown, ctx->req, ctx->res);
+            ctx->finish();
+            return;
+        }
+
+        if (!next_called) {
+            if (!ctx->res.sent()) {
+                InternalError wrapped(
+                    "Middleware at index " + std::to_string(index) +
+                    " finished without calling next() or sending a response.",
+                    "Every middleware must either call next() or send a response."
+                );
+                handleError(wrapped, ctx->req, ctx->res);
+            }
+            ctx->finish();
         }
     }
 
-    // ──────────────────────────────────────────────────────
-    //  Per-request dispatch
-    // ──────────────────────────────────────────────────────
+public:
     void handleRequest(const drogon::HttpRequestPtr&                       native_req,
                        std::function<void(const drogon::HttpResponsePtr&)>&& callback) {
-        Request  req(native_req);
-        Response res;
+        auto ctx = std::make_shared<RequestContext>(native_req, after_handlers_, std::move(callback));
+        current_request_context = ctx;
 
         try {
-            Handler final_handler = [&](Request& final_req, Response& final_res) {
-                // Static files first
-                if (serveStatic(final_req, final_res)) return;
+            auto final_handler = [this](std::shared_ptr<RequestContext>& f_ctx) {
+                if (serveStatic(f_ctx->req, f_ctx->res)) {
+                    f_ctx->finish();
+                    return;
+                }
 
-                auto route = router_.match(final_req.method(), final_req.path());
+                auto route = router_.match(f_ctx->req.method(), f_ctx->req.path());
                 if (!route.matched) {
-                    const auto allowed = router_.allowedMethods(final_req.path());
+                    const auto allowed = router_.allowedMethods(f_ctx->req.path());
                     if (!allowed.empty()) {
-                        if (method_not_allowed_handler_) {
-                            method_not_allowed_handler_(final_req, final_res);
+                        if (std::holds_alternative<SyncHandler>(method_not_allowed_handler_)) {
+                            std::get<SyncHandler>(method_not_allowed_handler_)(f_ctx->req, f_ctx->res);
+                            f_ctx->finish();
                             return;
                         }
-                        // Build Allow header
                         std::string allow_value;
                         for (std::size_t i = 0; i < allowed.size(); ++i) {
                             if (i > 0) allow_value += ", ";
                             allow_value += allowed[i];
                         }
-                        final_res.header("Allow", allow_value);
+                        f_ctx->res.header("Allow", allow_value);
 
-                        throw MethodNotAllowedError(final_req.method(), final_req.path());
-                    }
-
-                    if (not_found_handler_) {
-                        not_found_handler_(final_req, final_res);
+                        MethodNotAllowedError err(f_ctx->req.method(), f_ctx->req.path());
+                        handleError(err, f_ctx->req, f_ctx->res);
+                        f_ctx->finish();
                         return;
                     }
-                    throw NotFoundError(
-                        "Cannot " + final_req.method() + " " + final_req.path(),
-                        "Make sure you've registered a route for this path, e.g. "
-                        "app.get(\"" + final_req.path() + "\", ...)."
+
+                    if (std::holds_alternative<SyncHandler>(not_found_handler_)) {
+                        std::get<SyncHandler>(not_found_handler_)(f_ctx->req, f_ctx->res);
+                        f_ctx->finish();
+                        return;
+                    }
+                    NotFoundError err(
+                        "Cannot " + f_ctx->req.method() + " " + f_ctx->req.path(),
+                        "Make sure you've registered a route for this path."
                     );
-                }
-
-                for (const auto& param : route.params) {
-                    final_req.setParam(param.first, param.second);
-                }
-
-                if (route.middleware.empty()) {
-                    route.handler(final_req, final_res);
+                    handleError(err, f_ctx->req, f_ctx->res);
+                    f_ctx->finish();
                     return;
                 }
 
-                runMiddlewareStack(route.middleware, 0, final_req, final_res, route.handler);
+                for (const auto& param : route.params) {
+                    f_ctx->req.setParam(param.first, param.second);
+                }
+
+                auto run_route_handler = [this](std::shared_ptr<RequestContext> r_ctx, Handler handler) {
+                    if (std::holds_alternative<SyncHandler>(handler)) {
+                        try {
+                            std::get<SyncHandler>(handler)(r_ctx->req, r_ctx->res);
+                        } catch (const std::exception& error) {
+                            handleError(error, r_ctx->req, r_ctx->res);
+                        } catch (...) {
+                            InternalError unknown("An unknown exception escaped.");
+                            handleError(unknown, r_ctx->req, r_ctx->res);
+                        }
+                        r_ctx->finish();
+                    } else {
+                        auto coro_h = std::get<CoroHandler>(handler);
+                        drogon::app().getLoop()->queueInLoop(
+                            drogon::async_func([this, r_ctx, coro_h]() -> drogon::Task<void> {
+                                try {
+                                    co_await coro_h(r_ctx->req, r_ctx->res);
+                                } catch (const std::exception& error) {
+                                    handleError(error, r_ctx->req, r_ctx->res);
+                                } catch (...) {
+                                    InternalError unknown("An unknown exception escaped.");
+                                    handleError(unknown, r_ctx->req, r_ctx->res);
+                                }
+                                r_ctx->finish();
+                                co_return;
+                            })
+                        );
+                    }
+                };
+
+                if (route.middleware.empty()) {
+                    run_route_handler(f_ctx, route.handler);
+                    return;
+                }
+
+                auto final_route_call = [run_route_handler, route](std::shared_ptr<RequestContext>& r_ctx) {
+                    run_route_handler(r_ctx, route.handler);
+                };
+
+                runMiddlewareStack(route.middleware, 0, f_ctx, final_route_call);
             };
 
-            runMiddlewareStack(middleware_, 0, req, res, final_handler);
+            runMiddlewareStack(middleware_, 0, ctx, final_handler);
 
-        } catch (const MiddlewareError& me) {
-            // Promote MiddlewareError to a 500 with a dev hint
-            InternalError wrapped(
-                "Middleware configuration error: " + std::string(me.what()),
-                me.fix()
-            );
-            handleError(wrapped, req, res);
         } catch (const std::exception& error) {
-            handleError(error, req, res);
+            handleError(error, ctx->req, ctx->res);
+            ctx->finish();
         } catch (...) {
-            InternalError unknown(
-                "An unknown C++ exception escaped the request handler.",
-                "Ensure all thrown types derive from std::exception. "
-                "Throwing raw ints, strings, or non-standard types is not supported."
-            );
-            handleError(unknown, req, res);
+            InternalError unknown("An unknown exception escaped the pipeline.");
+            handleError(unknown, ctx->req, ctx->res);
+            ctx->finish();
         }
 
-        runAfterHandlers(req, res);
-        callback(res.native());
+        current_request_context = nullptr;
     }
 
-    // ──────────────────────────────────────────────────────
-    //  Startup validation
-    // ──────────────────────────────────────────────────────
+    // Public test injection endpoint for Supertest-style in-memory testing
+    void injectRequest(const drogon::HttpRequestPtr& req,
+                       std::function<void(const drogon::HttpResponsePtr&)>&& callback) {
+        handleRequest(req, std::move(callback));
+    }
+
     void validateConfig(const std::string& host, int port) const {
         if (port <= 0 || port > 65535) {
             detail::printStartupError(
@@ -410,10 +485,6 @@ private:
         );
     }
 
-public:
-    // ──────────────────────────────────────────────────────
-    //  Constructor: set sensible default not-found handler
-    // ──────────────────────────────────────────────────────
     App() {
         notFound([](Request& req, Response& res) {
             res.status(404).json({
@@ -423,9 +494,6 @@ public:
         });
     }
 
-    // ──────────────────────────────────────────────────────
-    //  Configuration
-    // ──────────────────────────────────────────────────────
     App& debug(bool enabled) {
         debug_         = enabled;
         config_.debug  = enabled;
@@ -442,9 +510,56 @@ public:
 
     const AppConfig& config() const { return config_; }
 
-    // ──────────────────────────────────────────────────────
-    //  Middleware
-    // ──────────────────────────────────────────────────────
+    App& database(const DbConfig& db_config) {
+        std::string driver = db_config.driver;
+        if (driver == "sqlite" || driver == "sqlite3") {
+            driver = "sqlite3";
+        } else if (driver == "postgres" || driver == "postgresql") {
+            driver = "postgresql";
+        } else if (driver == "mysql") {
+            driver = "mysql";
+        }
+
+        try {
+            if (driver == "sqlite3") {
+                drogon::orm::Sqlite3Config config{};
+                config.connectionNumber = db_config.connection_number;
+                config.filename = db_config.database;
+                config.name = db_config.name;
+                config.timeout = 0.0;
+                drogon::app().addDbClient(config);
+            } else if (driver == "postgresql") {
+                drogon::orm::PostgresConfig config{};
+                config.host = db_config.host;
+                config.port = static_cast<unsigned short>(db_config.port);
+                config.databaseName = db_config.database;
+                config.username = db_config.username;
+                config.password = db_config.password;
+                config.connectionNumber = db_config.connection_number;
+                config.name = db_config.name;
+                config.isFast = false;
+                drogon::app().addDbClient(config);
+            } else if (driver == "mysql") {
+                drogon::orm::MysqlConfig config{};
+                config.host = db_config.host;
+                config.port = static_cast<unsigned short>(db_config.port);
+                config.databaseName = db_config.database;
+                config.username = db_config.username;
+                config.password = db_config.password;
+                config.connectionNumber = db_config.connection_number;
+                config.name = db_config.name;
+                config.isFast = false;
+                drogon::app().addDbClient(config);
+            } else {
+                throw std::invalid_argument("Unsupported database driver: " + driver);
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "[xpress++ db error] Failed to create database client: " << e.what() << "\n";
+            throw;
+        }
+        return *this;
+    }
+
     App& use(Middleware middleware) {
         middleware_.push_back(std::move(middleware));
         return *this;
@@ -454,7 +569,7 @@ public:
         auto mount_prefix   = trimTrailingSlash(prefix);
         const auto mounted  = router;
         middleware_.push_back(
-            [mount_prefix, mounted](Request& req, Response& res, Next next) mutable {
+            [this, mount_prefix, mounted](Request& req, Response& res, Next next) mutable {
                 if (req.path().rfind(mount_prefix, 0) != 0) { next(); return; }
 
                 auto relative = req.path().substr(mount_prefix.size());
@@ -466,15 +581,33 @@ public:
                 for (const auto& p : route.params) {
                     req.setParam(p.first, p.second);
                 }
-                route.handler(req, res);
+
+                if (std::holds_alternative<SyncHandler>(route.handler)) {
+                    std::get<SyncHandler>(route.handler)(req, res);
+                } else {
+                    auto* ctx = current_request_context.get();
+                    if (ctx) {
+                        auto coro_h = std::get<CoroHandler>(route.handler);
+                        auto launch = [this, ctx, coro_h]() -> drogon::AsyncTask {
+                            try {
+                                co_await coro_h(ctx->req, ctx->res);
+                            } catch (const std::exception& e) {
+                                const_cast<App*>(this)->handleError(e, ctx->req, ctx->res);
+                            } catch (...) {
+                                InternalError unknown("An unknown exception escaped.");
+                                const_cast<App*>(this)->handleError(unknown, ctx->req, ctx->res);
+                            }
+                            ctx->finish();
+                            co_return;
+                        };
+                        launch();
+                    }
+                }
             }
         );
         return *this;
     }
 
-    // ──────────────────────────────────────────────────────
-    //  Routing
-    // ──────────────────────────────────────────────────────
     App& group(const std::string& prefix, RouterBuilder builder) {
         Router grouped;
         grouped.caseSensitive(config_.caseSensitiveRouting);
@@ -486,6 +619,21 @@ public:
 
     App& after(AfterHandler handler) {
         after_handlers_.push_back(std::move(handler));
+        return *this;
+    }
+
+    App& onStart(std::function<Task()> callback) {
+        drogon::app().registerBeginningAdvice([callback = std::move(callback)]() {
+            auto run_callback = [callback]() -> drogon::AsyncTask {
+                try {
+                    co_await callback();
+                } catch (const std::exception& e) {
+                    std::cerr << "[xpress++ startup error] " << e.what() << std::endl;
+                }
+                co_return;
+            };
+            run_callback();
+        });
         return *this;
     }
 
@@ -518,32 +666,35 @@ public:
         return *this;
     }
 
-    // ──────────────────────────────────────────────────────
-    //  Route registration
-    // ──────────────────────────────────────────────────────
-    App& get    (const std::string& path, Handler h) { router_.get    (path, std::move(h)); return *this; }
-    App& post   (const std::string& path, Handler h) { router_.post   (path, std::move(h)); return *this; }
-    App& put    (const std::string& path, Handler h) { router_.put    (path, std::move(h)); return *this; }
-    App& patch  (const std::string& path, Handler h) { router_.patch  (path, std::move(h)); return *this; }
-    App& del    (const std::string& path, Handler h) { router_.del    (path, std::move(h)); return *this; }
-    App& options(const std::string& path, Handler h) { router_.options(path, std::move(h)); return *this; }
-    App& head   (const std::string& path, Handler h) { router_.head   (path, std::move(h)); return *this; }
-    App& all    (const std::string& path, Handler h) { router_.all    (path, std::move(h)); return *this; }
+    template <typename H> App& get    (const std::string& path, H&& h) { router_.get    (path, std::forward<H>(h)); return *this; }
+    template <typename H> App& post   (const std::string& path, H&& h) { router_.post   (path, std::forward<H>(h)); return *this; }
+    template <typename H> App& put    (const std::string& path, H&& h) { router_.put    (path, std::forward<H>(h)); return *this; }
+    template <typename H> App& patch  (const std::string& path, H&& h) { router_.patch  (path, std::forward<H>(h)); return *this; }
+    template <typename H> App& del    (const std::string& path, H&& h) { router_.del    (path, std::forward<H>(h)); return *this; }
+    template <typename H> App& options(const std::string& path, H&& h) { router_.options(path, std::forward<H>(h)); return *this; }
+    template <typename H> App& head   (const std::string& path, H&& h) { router_.head   (path, std::forward<H>(h)); return *this; }
+    template <typename H> App& all    (const std::string& path, H&& h) { router_.all    (path, std::forward<H>(h)); return *this; }
 
-    App& get    (const std::string& path, std::vector<Middleware> mw, Handler h) { router_.get    (path, std::move(mw), std::move(h)); return *this; }
-    App& post   (const std::string& path, std::vector<Middleware> mw, Handler h) { router_.post   (path, std::move(mw), std::move(h)); return *this; }
-    App& put    (const std::string& path, std::vector<Middleware> mw, Handler h) { router_.put    (path, std::move(mw), std::move(h)); return *this; }
-    App& patch  (const std::string& path, std::vector<Middleware> mw, Handler h) { router_.patch  (path, std::move(mw), std::move(h)); return *this; }
-    App& del    (const std::string& path, std::vector<Middleware> mw, Handler h) { router_.del    (path, std::move(mw), std::move(h)); return *this; }
-    App& options(const std::string& path, std::vector<Middleware> mw, Handler h) { router_.options(path, std::move(mw), std::move(h)); return *this; }
-    App& head   (const std::string& path, std::vector<Middleware> mw, Handler h) { router_.head   (path, std::move(mw), std::move(h)); return *this; }
-    App& all    (const std::string& path, std::vector<Middleware> mw, Handler h) { router_.all    (path, std::move(mw), std::move(h)); return *this; }
+    template <typename H> App& get    (const std::string& path, Middleware mw, H&& h) { router_.get    (path, std::move(mw), std::forward<H>(h)); return *this; }
+    template <typename H> App& post   (const std::string& path, Middleware mw, H&& h) { router_.post   (path, std::move(mw), std::forward<H>(h)); return *this; }
+    template <typename H> App& put    (const std::string& path, Middleware mw, H&& h) { router_.put    (path, std::move(mw), std::forward<H>(h)); return *this; }
+    template <typename H> App& patch  (const std::string& path, Middleware mw, H&& h) { router_.patch  (path, std::move(mw), std::forward<H>(h)); return *this; }
+    template <typename H> App& del    (const std::string& path, Middleware mw, H&& h) { router_.del    (path, std::move(mw), std::forward<H>(h)); return *this; }
+    template <typename H> App& options(const std::string& path, Middleware mw, H&& h) { router_.options(path, std::move(mw), std::forward<H>(h)); return *this; }
+    template <typename H> App& head   (const std::string& path, Middleware mw, H&& h) { router_.head   (path, std::move(mw), std::forward<H>(h)); return *this; }
+    template <typename H> App& all    (const std::string& path, Middleware mw, H&& h) { router_.all    (path, std::move(mw), std::forward<H>(h)); return *this; }
+
+    template <typename H> App& get    (const std::string& path, std::vector<Middleware> mw, H&& h) { router_.get    (path, std::move(mw), std::forward<H>(h)); return *this; }
+    template <typename H> App& post   (const std::string& path, std::vector<Middleware> mw, H&& h) { router_.post   (path, std::move(mw), std::forward<H>(h)); return *this; }
+    template <typename H> App& put    (const std::string& path, std::vector<Middleware> mw, H&& h) { router_.put    (path, std::move(mw), std::forward<H>(h)); return *this; }
+    template <typename H> App& patch  (const std::string& path, std::vector<Middleware> mw, H&& h) { router_.patch  (path, std::move(mw), std::forward<H>(h)); return *this; }
+    template <typename H> App& del    (const std::string& path, std::vector<Middleware> mw, H&& h) { router_.del    (path, std::move(mw), std::forward<H>(h)); return *this; }
+    template <typename H> App& options(const std::string& path, std::vector<Middleware> mw, H&& h) { router_.options(path, std::move(mw), std::forward<H>(h)); return *this; }
+    template <typename H> App& head   (const std::string& path, std::vector<Middleware> mw, H&& h) { router_.head   (path, std::move(mw), std::forward<H>(h)); return *this; }
+    template <typename H> App& all    (const std::string& path, std::vector<Middleware> mw, H&& h) { router_.all    (path, std::move(mw), std::forward<H>(h)); return *this; }
 
     std::vector<RouteInfo> routes() const { return router_.routes(); }
 
-    // ──────────────────────────────────────────────────────
-    //  listen() overloads
-    // ──────────────────────────────────────────────────────
     void listen(int port) {
         listen("0.0.0.0", port);
     }

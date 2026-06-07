@@ -39,6 +39,13 @@ public:
         native_response_->setStatusCode(drogon::k200OK);
     }
 
+    explicit Response(drogon::HttpResponsePtr native_res)
+        : native_response_(std::move(native_res)) {
+        if (native_response_) {
+            status_code_ = static_cast<int>(native_response_->statusCode());
+        }
+    }
+
     Response& status(int code) {
         status_code_ = code;
         native_response_->setStatusCode(static_cast<drogon::HttpStatusCode>(code));
@@ -84,6 +91,28 @@ public:
         native_response_->setContentTypeCode(drogon::CT_APPLICATION_JSON);
         sent_ = true;
         return *this;
+    }
+
+    Response& json(const drogon::orm::Result& res) {
+        Json::Value arr(Json::arrayValue);
+        for (const auto& row : res) {
+            Json::Value val(Json::objectValue);
+            for (std::size_t i = 0; i < row.size(); ++i) {
+                const auto& field = row[i];
+                std::string colName = res.columnName(i);
+                if (field.isNull()) {
+                    val[colName] = Json::Value();
+                } else {
+                    try {
+                        val[colName] = field.as<std::string>();
+                    } catch (...) {
+                        val[colName] = Json::Value();
+                    }
+                }
+            }
+            arr.append(val);
+        }
+        return json(arr);
     }
 
     Response& json(std::initializer_list<std::pair<std::string, Json::Value>> items) {
@@ -218,6 +247,26 @@ public:
 
     bool sent() const {
         return sent_;
+    }
+
+    std::string header(const std::string& key) const {
+        return native_response_ ? native_response_->getHeader(key) : "";
+    }
+
+    std::string body() const {
+        return native_response_ ? std::string(native_response_->body()) : "";
+    }
+
+    Json::Value json() const {
+        Json::Value root;
+        Json::CharReaderBuilder builder;
+        std::string errs;
+        std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
+        std::string body_str = body();
+        if (!reader->parse(body_str.data(), body_str.data() + body_str.size(), &root, &errs)) {
+            return Json::nullValue;
+        }
+        return root;
     }
 
     drogon::HttpResponsePtr native() const {

@@ -212,6 +212,17 @@ main() {
 
     install_deps "${os}"
     echo ""
+
+    # If running standalone (e.g. via curl | bash or copying just the install.sh file)
+    if [ ! -d "${ROOT_DIR}/cli" ]; then
+        step "Cloning Xpress++ core repository to ${HOME}/.xpresspp..."
+        rm -rf "${HOME}/.xpresspp"
+        git clone --depth 1 https://github.com/aaryan359/xpresspp.git "${HOME}/.xpresspp"
+        ROOT_DIR="${HOME}/.xpresspp"
+        XP_BINARY="${ROOT_DIR}/cli/build/xp"
+        XP_WRAPPER="${INSTALL_DIR}/xp"
+    fi
+
     install_drogon
     echo ""
     build_cli
@@ -232,3 +243,4 @@ main() {
 }
 
 main
+

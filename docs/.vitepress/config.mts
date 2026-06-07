@@ -51,6 +51,7 @@ export default defineConfig({
       {
         text: '⚡ Core Framework',
         items: [
+          { text: 'Async & Await', link: '/async-await' },
           { text: 'Routing', link: '/routing' },
           { text: 'Request', link: '/request' },
           { text: 'Response', link: '/response' },

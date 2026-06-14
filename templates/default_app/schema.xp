@@ -1,0 +1,13 @@
+// schema.xp — Xpress++ Schema Definition
+// Run: xp migrate   to generate C++ model files from this schema.
+//
+// Syntax is Prisma-compatible.
+
+// Uncomment and customise when you're ready to add a database.
+
+// model User {
+//   id        Int      @id @default(autoincrement())
+//   username  String   @unique
+//   password  String
+//   createdAt DateTime @default(now())
+// }

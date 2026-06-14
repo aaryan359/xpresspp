@@ -8,6 +8,12 @@
 #include <thread>
 #include <sstream>
 
+#if !defined(_WIN32)
+#include <signal.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
+
 namespace xp::cli {
 
 // ============================================================
@@ -140,17 +146,30 @@ int createApp(const std::string& name) {
 
     // Write .gitignore
     std::ofstream gitignore(target / ".gitignore");
-    gitignore << "build/\n.vscode/\nuploads/tmp/\n";
+    gitignore
+        << "build/\n"
+        << ".vscode/\n"
+        << "uploads/tmp/\n"
+        << ".env\n"          // never commit secrets
+        << "*.db\n"
+        << "*.log\n";
 
     divider();
     success(std::string("Created project  ") + colour::bold() + name + colour::reset());
-    std::cout << "\n"
-              << colour::bold() << "  Next steps:\n" << colour::reset()
-              << colour::cyan()
-              << "    cd " << name << "\n"
-              << "    xp run\n"
-              << colour::reset()
-              << "\n";
+    std::cout
+        << "\n"
+        << colour::bold() << "  Next steps:\n" << colour::reset()
+        << colour::cyan()
+        << "    cd " << name << "\n"
+        << "    cp .env.example .env      # set your config\n"
+        << "    xp watch                  # build, run, and live-reload\n"
+        << colour::reset()
+        << "\n"
+        << colour::dim()
+        << "  Or for a one-shot run:\n"
+        << "    xp run\n"
+        << colour::reset()
+        << "\n";
     return 0;
 }
 
@@ -279,10 +298,18 @@ int watch() {
         return 1;
     }
 
+    // Initial build
+    info("Initial build before watching...");
+    if (build(false) != 0) {
+        warn("Initial build failed. Fix the errors above — watching for changes to retry.");
+    }
+
     auto last = snapshotSources();
     info("Watching for source changes. Press Ctrl+C to stop.");
     divider();
 
+#if defined(_WIN32)
+    // Windows: basic watch without process tracking
     while (true) {
         std::this_thread::sleep_for(std::chrono::milliseconds(800));
         auto current = snapshotSources();
@@ -292,10 +319,73 @@ int watch() {
             if (build(false) != 0) {
                 warn("Build failed. Fix the errors above and save your files to retry.");
             } else {
-                success("Rebuild complete.");
+                success("Rebuild complete. Restart the server manually on Windows.");
             }
         }
     }
+#else
+    pid_t server_pid = -1;
+
+    // Helper: start the server binary as a child process
+    auto startServer = [&]() {
+        const auto binary = projectBinary();
+        if (binary.empty()) {
+            warn("No executable found in ./build — skipping server launch.");
+            return;
+        }
+        server_pid = ::fork();
+        if (server_pid == 0) {
+            // Child: exec the server
+            ::execl(binary.c_str(), binary.c_str(), nullptr);
+            ::_exit(127); // exec failed
+        } else if (server_pid < 0) {
+            warn("fork() failed — could not launch server.");
+            server_pid = -1;
+        } else {
+            info("Server started (PID " + std::to_string(server_pid) + "): " + binary);
+        }
+    };
+
+    // Helper: kill the current server process
+    auto stopServer = [&]() {
+        if (server_pid > 0) {
+            info("Stopping server (PID " + std::to_string(server_pid) + ") ...");
+            ::kill(server_pid, SIGTERM);
+            int status = 0;
+            ::waitpid(server_pid, &status, 0);
+            server_pid = -1;
+        }
+    };
+
+    startServer();
+
+    while (true) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(800));
+
+        // Collect the child exit status without blocking (reap crashed servers)
+        if (server_pid > 0) {
+            int status = 0;
+            pid_t result = ::waitpid(server_pid, &status, WNOHANG);
+            if (result == server_pid) {
+                warn("Server exited unexpectedly. Waiting for file change to restart...");
+                server_pid = -1;
+            }
+        }
+
+        auto current = snapshotSources();
+        if (current != last) {
+            last = current;
+            info("Changes detected — rebuilding ...");
+            stopServer();
+            if (build(false) != 0) {
+                warn("Build failed. Fix the errors above and save your files to retry.");
+            } else {
+                success("Rebuild complete — restarting server...");
+                startServer();
+            }
+        }
+    }
+#endif
 }
 
 // ============================================================

@@ -5,6 +5,7 @@
 #include <json/json.h>
 
 #include <algorithm>
+#include <any>
 #include <cctype>
 #include <optional>
 #include <sstream>
@@ -19,6 +20,27 @@ private:
     drogon::HttpRequestPtr native_request_;
     std::unordered_map<std::string, std::string> params_;
 
+public:
+    // Request-scoped data store — same concept as Express req.locals.
+    // Middleware can store any typed value; route handlers read it back.
+    //
+    //   middleware:  req.locals["user"] = verifiedUser;
+    //   handler:     auto user = req.local<User>("user");
+    std::unordered_map<std::string, std::any> locals;
+
+    // Typed getter with default — returns default_val if key absent or wrong type
+    template <typename T>
+    T local(const std::string& key, T default_val = T{}) const {
+        auto it = locals.find(key);
+        if (it == locals.end()) return default_val;
+        try {
+            return std::any_cast<T>(it->second);
+        } catch (const std::bad_any_cast&) {
+            return default_val;
+        }
+    }
+
+private:
     static std::string lower(std::string value) {
         std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
             return static_cast<char>(std::tolower(c));

@@ -1,38 +1,24 @@
 #pragma once
 #include <xpresspp/xpresspp.h>
 
-// This is exactly like Express:
-//   const router = express.Router()
-//   router.get('/ping', handler)
-//   module.exports = router
-//
-// Here:
-//   inline xp::Router indexRoutes() { ... }
-//   app.use("/api", indexRoutes());
-
-namespace routes {
 
 inline xp::Router indexRoutes() {
     xp::Router router;
 
-    // GET /api/ping  — health check
+    // GET /api/ping
     router.get("/ping", [](xp::Request& req, xp::Response& res) {
         res.json({{"status", "ok"}, {"message", "pong"}});
     });
 
-    // GET /api/hello/:name  — URL params
+    // GET /api/hello/:name
     router.get("/hello/:name", [](xp::Request& req, xp::Response& res) {
-        const auto name = req.param("name");
-        res.json({{"hello", name}});
+        res.json({{"hello", req.param("name")}});
     });
 
-    // POST /api/echo  — read JSON body
+    // POST /api/echo
     router.post("/echo", [](xp::Request& req, xp::Response& res) {
-        const auto body = req.json();
-        res.json(body);
+        res.json(req.json());
     });
 
     return router;
 }
-
-} 

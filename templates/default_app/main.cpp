@@ -1,13 +1,5 @@
 #include <xpresspp/xpresspp.h>
-
-// ── Route Imports ─────────────────────────────────────────────
-// Each #include is like: import { authRoutes } from './routes/auth'
-// The function name tells you exactly which file it came from.
-//
 #include "src/routes/index.h"    // → indexRoutes()
-// #include "src/routes/auth.h"  // → authRoutes()
-// #include "src/routes/users.h" // → userRoutes()
-// ─────────────────────────────────────────────────────────────
 
 int main() {
     xp::loadEnv(); // reads .env → PORT, JWT_SECRET, etc.
@@ -18,9 +10,17 @@ int main() {
     app.use(xp::logger());
     app.use(xp::cors());
 
+    // ── Global Error Handler ──────────────────────────────────
+    app.onError([](const std::exception& e, xp::Request& req, xp::Response& res) {
+        res.status(500).json({
+            {"error", e.what()},
+            {"path", req.path()}
+        });
+    });
+
     // ── Mount Routes ──────────────────────────────────────────
     // Read as: "mount indexRoutes (src/routes/index.h) at /api"
-    app.use("/api",       indexRoutes());
+    app.use("/api", Routes());
     // app.use("/api/auth",  authRoutes());   ← uncomment when you add auth.h
     // app.use("/api/users", userRoutes());   ← uncomment when you add users.h
 

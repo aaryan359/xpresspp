@@ -13,6 +13,8 @@
 #include <string>
 #include <unordered_map>
 
+#include "validation.h"
+
 namespace xp {
 
 class Request {
@@ -250,6 +252,70 @@ public:
 
     void setParam(const std::string& key, const std::string& value) {
         params_[key] = value;
+    }
+
+    ValidationResult validate(std::initializer_list<std::pair<std::string, ValidationRule>> rules) const {
+        ValidationResult result;
+        Json::Value body_val;
+        try {
+            body_val = json();
+        } catch (const std::exception& e) {
+            result.error.message = std::string("Invalid JSON body: ") + e.what();
+            return result;
+        }
+
+        for (const auto& pair : rules) {
+            const auto& name = pair.first;
+            const auto& rule = pair.second;
+
+            if (!body_val.isMember(name) || body_val[name].isNull()) {
+                if (rule.flags & Required) {
+                    result.error.message = "Field '" + name + "' is required";
+                    return result;
+                }
+                continue;
+            }
+
+            const auto& val = body_val[name];
+            
+            // Check type / values
+            if (rule.flags & Email) {
+                if (!val.isString()) {
+                    result.error.message = "Field '" + name + "' must be a valid email string";
+                    return result;
+                }
+                const std::string s = val.asString();
+                if (s.find('@') == std::string::npos || s.find('.') == std::string::npos) {
+                    result.error.message = "Field '" + name + "' must be a valid email address";
+                    return result;
+                }
+            }
+
+            if (rule.min_length != -1) {
+                if (!val.isString()) {
+                    result.error.message = "Field '" + name + "' must be a string for MinLength validation";
+                    return result;
+                }
+                if (static_cast<int>(val.asString().length()) < rule.min_length) {
+                    result.error.message = "Field '" + name + "' must be at least " + std::to_string(rule.min_length) + " characters";
+                    return result;
+                }
+            }
+
+            if (rule.max_length != -1) {
+                if (!val.isString()) {
+                    result.error.message = "Field '" + name + "' must be a string for MaxLength validation";
+                    return result;
+                }
+                if (static_cast<int>(val.asString().length()) > rule.max_length) {
+                    result.error.message = "Field '" + name + "' must be at most " + std::to_string(rule.max_length) + " characters";
+                    return result;
+                }
+            }
+        }
+
+        result.body = body_val;
+        return result;
     }
 
     const drogon::HttpRequestPtr& native() const {

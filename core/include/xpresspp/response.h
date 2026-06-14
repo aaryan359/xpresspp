@@ -103,7 +103,10 @@ public:
     }
 
     Response& json(const Json::Value& value) {
-        native_response_ = drogon::HttpResponse::newHttpJsonResponse(value);
+        Json::StreamWriterBuilder writer;
+        std::string json_str = Json::writeString(writer, value);
+        native_response_->setBody(std::move(json_str));
+        native_response_->setContentTypeCode(drogon::CT_APPLICATION_JSON);
         sent_ = true;
         return *this;
     }
@@ -151,6 +154,10 @@ public:
         native_response_->addHeader("Location", url);
         sent_ = true;
         return *this;
+    }
+
+    Response& redirect(int code, const std::string& url) {
+        return redirect(url, code);
     }
 
     Response& cookie(const std::string& key,

@@ -269,8 +269,8 @@ public:
             const auto& rule = pair.second;
 
             if (!body_val.isMember(name) || body_val[name].isNull()) {
-                if (rule.flags & Required) {
-                    result.error.message = "Field '" + name + "' is required";
+                if (rule.isRequired()) {
+                    result.error.message = !rule.requiredMsg().empty() ? rule.requiredMsg() : ("Field '" + name + "' is required");
                     return result;
                 }
                 continue;
@@ -278,37 +278,11 @@ public:
 
             const auto& val = body_val[name];
             
-            // Check type / values
-            if (rule.flags & Email) {
-                if (!val.isString()) {
-                    result.error.message = "Field '" + name + "' must be a valid email string";
-                    return result;
-                }
-                const std::string s = val.asString();
-                if (s.find('@') == std::string::npos || s.find('.') == std::string::npos) {
-                    result.error.message = "Field '" + name + "' must be a valid email address";
-                    return result;
-                }
-            }
-
-            if (rule.min_length != -1) {
-                if (!val.isString()) {
-                    result.error.message = "Field '" + name + "' must be a string for MinLength validation";
-                    return result;
-                }
-                if (static_cast<int>(val.asString().length()) < rule.min_length) {
-                    result.error.message = "Field '" + name + "' must be at least " + std::to_string(rule.min_length) + " characters";
-                    return result;
-                }
-            }
-
-            if (rule.max_length != -1) {
-                if (!val.isString()) {
-                    result.error.message = "Field '" + name + "' must be a string for MaxLength validation";
-                    return result;
-                }
-                if (static_cast<int>(val.asString().length()) > rule.max_length) {
-                    result.error.message = "Field '" + name + "' must be at most " + std::to_string(rule.max_length) + " characters";
+            // Run all validation checks sequentially
+            for (const auto& check : rule.checks()) {
+                std::string err_msg = check(name, val);
+                if (!err_msg.empty()) {
+                    result.error.message = err_msg;
                     return result;
                 }
             }

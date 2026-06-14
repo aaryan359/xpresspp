@@ -34,8 +34,8 @@ inline xp::Router Routes() {
     // POST /api/signup — validation example
     router.post("/signup", [](xp::Request& req, xp::Response& res) {
         auto [body, err] = req.validate({
-            {"username", xp::Required | xp::MinLength(3)},
-            {"password", xp::Required | xp::MinLength(8)}
+            {"username", xp::string().required("Username is required!").min(3, "Username must be 3+ chars!")},
+            {"password", xp::string().required().min(8)}
         });
         if (err) {
             res.status(400).json(err);

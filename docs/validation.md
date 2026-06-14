@@ -2,9 +2,47 @@
 
 Xpress++ includes an integrated validation middleware (`xp::validate`) to perform input validation before request handlers execute. If validation fails, it automatically rejects the request with a descriptive `400 Bad Request` error response.
 
-You can validate request payloads in two ways:
-1. **Schema-Based Validation** (Declarative validation, similar to Zod).
-2. **Custom Validation Logic** (Functional validation for dynamic/business rules).
+You can validate request payloads in three ways:
+1. **Fluent In-Route Validation** (Dot-chained, Zod-like builder schemas inside route handlers with custom error messages).
+2. **Schema-Based Middleware** (Declarative validation before route execution).
+3. **Custom Validation Logic** (Functional validation for dynamic/business rules).
+
+---
+
+## Fluent In-Route Validation (`req.validate`)
+
+The most expressive way to validate request JSON payloads is using `req.validate(...)` directly inside your route handlers. This uses a Zod/Yup-like dot-chained builder pattern and supports C++17 structured bindings.
+
+```cpp
+app.post("/api/signup", [](xp::Request& req, xp::Response& res) {
+    auto [body, err] = req.validate({
+        {"username", xp::string().required("Username is required!").min(3, "Username must be 3+ characters")},
+        {"password", xp::string().required().min(8)},
+        {"email",    xp::string().required().email("Must be a valid email address")}
+    });
+
+    if (err) {
+        res.status(400).json(err);
+        return;
+    }
+
+    // body is safe to use as validated JSON!
+    res.json({{"status", "success"}, {"username", body["username"]}});
+});
+```
+
+### Fluent Chaining Methods
+
+You can chain these rules on `xp::string()`, `xp::number()`, `xp::boolean()`, or `xp::any()`:
+
+| Method | Description |
+|--------|-------------|
+| `.required(custom_msg)` | Enforces that the field exists and is not null. |
+| `.min(length, custom_msg)` | String length must be at least `length` characters. |
+| `.max(length, custom_msg)` | String length must be at most `length` characters. |
+| `.email(custom_msg)` | String must match email structure. |
+| `.custom(predicate, custom_msg)` | Pass a custom lambda `bool(const Json::Value&)` returning true on success. |
+| `.unique(table, column, custom_msg)` | Database uniqueness check (Future integration). |
 
 ---
 

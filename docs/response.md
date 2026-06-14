@@ -118,8 +118,11 @@ res.type("text/plain; charset=utf-8");
 // 302 Temporary redirect (default):
 res.redirect("/new-location");
 
-// 301 Permanent redirect:
+// 301 Permanent redirect (Location first):
 res.redirect("/new-location", 301);
+
+// 301 Permanent redirect (Status first, Express-style):
+res.redirect(301, "/new-location");
 
 // Full URL:
 res.redirect("https://example.com");

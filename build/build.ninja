@@ -53,7 +53,7 @@ build CMakeFiles/xpresspp_app.dir/main.cpp.o: CXX_COMPILER__xpresspp_app_unscann
   DEFINES = -DHAS_YAML_CPP
   DEP_FILE = CMakeFiles/xpresspp_app.dir/main.cpp.o.d
   FLAGS = -g -std=c++20
-  INCLUDES = -I/home/aaryan/Desktop/xpress++/templates/default_app/../../core/include -isystem /usr/include/jsoncpp
+  INCLUDES = -I/home/aaryan/Desktop/xpress++/templates/default_app/vendor/xpresspp/include -I/home/aaryan/Desktop/xpress++/templates/default_app/../../core/include -isystem /usr/include/jsoncpp
   OBJECT_DIR = CMakeFiles/xpresspp_app.dir
   OBJECT_FILE_DIR = CMakeFiles/xpresspp_app.dir
 

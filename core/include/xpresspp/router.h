@@ -17,9 +17,10 @@
 
 namespace xp {
 
-using Task = drogon::Task<void>;
+template <typename T = void>
+using Task = drogon::Task<T>;
 using SyncHandler = std::function<void(Request&, Response&)>;
-using CoroHandler = std::function<Task(Request&, Response&)>;
+using CoroHandler = std::function<Task<void>(Request&, Response&)>;
 using Handler = std::variant<SyncHandler, CoroHandler>;
 using Next = std::function<void()>;
 using Middleware = std::function<void(Request&, Response&, Next)>;
@@ -139,7 +140,7 @@ public:
              H&& handler,
              std::vector<Middleware> middleware = {}) {
         Handler target;
-        if constexpr (std::is_invocable_r_v<Task, H, Request&, Response&>) {
+        if constexpr (std::is_invocable_r_v<Task<void>, H, Request&, Response&>) {
             target = CoroHandler(std::forward<H>(handler));
         } else {
             target = SyncHandler(std::forward<H>(handler));

@@ -1,0 +1,80 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id             Int              @id @default(autoincrement())
+  name           String?
+  username       String?          @unique
+  email          String           @unique
+  profilePicture String?
+  password       String?
+  prompts        MarketPrompt[]
+  chatPrompts    ChatPrompt[]
+  likes          Like[]
+  purchases      PromptPurchase[]
+  Subscribed     Boolean?
+  created_at     DateTime         @default(now())
+
+  @@map("users")
+}
+
+model MarketPrompt {
+  id           Int              @id @default(autoincrement())
+  title        String
+  description  String
+  category     String
+  price        Float
+  rating       Float            @default(0.0)
+  likes        Like[]
+  likesCount   Int              @default(0)
+  outputImage  String[]
+  outputText   String?
+  modelUsed    String?
+  userPrompt   String?
+  systemPrompt String?
+  authorId     Int
+  isPurchased  Boolean?
+  purchases    PromptPurchase[]
+  createdAt    DateTime         @default(now())
+
+  @@map("market_prompts")
+}
+
+model ChatPrompt {
+  id           Int      @id @default(autoincrement())
+  systemPrompt String?
+  userPrompt   String
+  aiResponse   String
+  voiceInput   String?
+  userId       Int
+  createdAt    DateTime @default(now())
+
+  @@map("chat_prompts")
+}
+
+model Like {
+  id        Int          @id @default(autoincrement())
+  userId    Int
+  promptId  Int
+  createdAt DateTime     @default(now())
+
+  @@unique([userId, promptId])
+  @@map("likes")
+}
+
+model PromptPurchase {
+  id            Int          @id @default(autoincrement())
+  userId        Int
+  promptId      Int
+  amount        Float
+  isActive      Boolean
+  paymentMethod String
+  purchasedAt   DateTime     @default(now())
+
+  @@map("prompt_purchases")
+}

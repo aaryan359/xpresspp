@@ -510,6 +510,68 @@ public:
 
     const AppConfig& config() const { return config_; }
 
+    static DbConfig parseDbUrl(const std::string& url) {
+        DbConfig db_config;
+        
+        auto scheme_end = url.find("://");
+        if (scheme_end == std::string::npos) {
+            throw std::invalid_argument("Invalid database connection URL: missing '://'");
+        }
+        
+        db_config.driver = url.substr(0, scheme_end);
+        std::string remainder = url.substr(scheme_end + 3);
+        
+        if (db_config.driver == "sqlite" || db_config.driver == "sqlite3") {
+            db_config.driver = "sqlite3";
+            db_config.database = remainder;
+            return db_config;
+        }
+        
+        auto at_sign = remainder.find('@');
+        std::string host_port_db = remainder;
+        if (at_sign != std::string::npos) {
+            std::string auth = remainder.substr(0, at_sign);
+            host_port_db = remainder.substr(at_sign + 1);
+            
+            auto colon = auth.find(':');
+            if (colon != std::string::npos) {
+                db_config.username = auth.substr(0, colon);
+                db_config.password = auth.substr(colon + 1);
+            } else {
+                db_config.username = auth;
+            }
+        }
+        
+        auto slash = host_port_db.find('/');
+        std::string host_port = host_port_db;
+        if (slash != std::string::npos) {
+            host_port = host_port_db.substr(0, slash);
+            db_config.database = host_port_db.substr(slash + 1);
+        }
+        
+        auto colon = host_port.find(':');
+        if (colon != std::string::npos) {
+            db_config.host = host_port.substr(0, colon);
+            db_config.port = std::stoi(host_port.substr(colon + 1));
+        } else {
+            db_config.host = host_port;
+            if (db_config.driver == "postgres" || db_config.driver == "postgresql") {
+                db_config.port = 5432;
+            } else if (db_config.driver == "mysql") {
+                db_config.port = 3306;
+            }
+        }
+        
+        return db_config;
+    }
+
+    App& database(const std::string& db_url, std::size_t connection_number = 1, const std::string& name = "default") {
+        DbConfig config = parseDbUrl(db_url);
+        config.connection_number = connection_number;
+        config.name = name;
+        return database(config);
+    }
+
     App& database(const DbConfig& db_config) {
         std::string driver = db_config.driver;
         if (driver == "sqlite" || driver == "sqlite3") {
@@ -622,7 +684,7 @@ public:
         return *this;
     }
 
-    App& onStart(std::function<Task()> callback) {
+    App& onStart(std::function<Task<void>()> callback) {
         drogon::app().registerBeginningAdvice([callback = std::move(callback)]() {
             auto run_callback = [callback]() -> drogon::AsyncTask {
                 try {

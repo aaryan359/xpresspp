@@ -549,4 +549,347 @@ int clean() {
     return 0;
 }
 
+// ============================================================
+//  Migrate Command (Prisma-like Schema Parser and Generator)
+// ============================================================
+struct FieldInfo {
+    std::string name;
+    std::string type;
+    bool nullable = false;
+    bool isPrimaryKey = false;
+    bool isUnique = false;
+    bool isDefaultNow = false;
+    bool isRelation = false;
+};
+
+struct ModelInfo {
+    std::string name;
+    std::string tableName;
+    std::vector<FieldInfo> fields;
+};
+
+static std::string trimString(const std::string& str) {
+    auto start = str.find_first_not_of(" \t\r\n");
+    if (start == std::string::npos) return "";
+    auto end = str.find_last_not_of(" \t\r\n");
+    return str.substr(start, end - start + 1);
+}
+
+static bool isPrimitiveType(const std::string& type) {
+    std::string t = type;
+    if (t.size() > 2 && t.substr(t.size() - 2) == "[]") {
+        t = t.substr(0, t.size() - 2);
+    }
+    return (t == "Int" || t == "String" || t == "Boolean" || t == "Float" || t == "DateTime");
+}
+
+static std::vector<std::string> splitString(const std::string& str) {
+    std::vector<std::string> tokens;
+    std::string token;
+    std::istringstream tokenStream(str);
+    while (tokenStream >> token) {
+        tokens.push_back(token);
+    }
+    return tokens;
+}
+
+int migrate() {
+    std::string reason;
+    if (!isXpressProject(&reason)) {
+        error("Not an Xpress++ project directory.", reason,
+              "Run this command from inside your project folder.");
+        return 1;
+    }
+
+    const fs::path schemaPath = fs::current_path() / "schema.xp";
+    if (!fs::exists(schemaPath)) {
+        error("schema.xp not found.",
+              "Please create a schema.xp file in the root of your project.",
+              "For example:\n"
+              "  model User {\n"
+              "    id Int @id @default(autoincrement())\n"
+              "    username String @unique\n"
+              "  }");
+        return 1;
+    }
+
+    info("Parsing schema.xp...");
+    std::ifstream file(schemaPath);
+    if (!file.is_open()) {
+        error("Failed to open schema.xp", "Check read permissions on " + schemaPath.string());
+        return 1;
+    }
+
+    std::vector<ModelInfo> models;
+    ModelInfo currentModel;
+    bool inModel = false;
+    std::string line;
+
+    while (std::getline(file, line)) {
+        line = trimString(line);
+        if (line.empty() || line.rfind("//", 0) == 0) {
+            continue;
+        }
+
+        if (line.rfind("model ", 0) == 0) {
+            auto tokens = splitString(line);
+            if (tokens.size() >= 2) {
+                currentModel = ModelInfo();
+                currentModel.name = tokens[1];
+                std::string lowerName = tokens[1];
+                std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
+                currentModel.tableName = lowerName + "s";
+                inModel = true;
+            }
+            continue;
+        }
+
+        if (inModel && line == "}") {
+            models.push_back(currentModel);
+            inModel = false;
+            continue;
+        }
+
+        if (inModel) {
+            if (line.rfind("@@map(", 0) == 0) {
+                auto firstQuote = line.find('"');
+                auto lastQuote = line.rfind('"');
+                if (firstQuote != std::string::npos && lastQuote != std::string::npos && firstQuote < lastQuote) {
+                    currentModel.tableName = line.substr(firstQuote + 1, lastQuote - firstQuote - 1);
+                }
+                continue;
+            }
+
+            auto tokens = splitString(line);
+            if (tokens.size() >= 2) {
+                FieldInfo f;
+                f.name = tokens[0];
+                std::string typeToken = tokens[1];
+
+                if (typeToken.back() == '?') {
+                    f.nullable = true;
+                    typeToken.pop_back();
+                }
+                f.type = typeToken;
+
+                f.isRelation = !isPrimitiveType(typeToken);
+
+                for (size_t i = 2; i < tokens.size(); ++i) {
+                    std::string dec = tokens[i];
+                    if (dec == "@id") {
+                        f.isPrimaryKey = true;
+                    } else if (dec == "@unique") {
+                        f.isUnique = true;
+                    } else if (dec.rfind("@default(", 0) == 0) {
+                        if (dec.find("autoincrement()") != std::string::npos) {
+                            f.type = "Serial";
+                            f.isPrimaryKey = true;
+                        } else if (dec.find("now()") != std::string::npos) {
+                            f.isDefaultNow = true;
+                        }
+                    }
+                }
+
+                currentModel.fields.push_back(f);
+            }
+        }
+    }
+
+    const fs::path modelsDir = fs::current_path() / "src" / "models";
+    fs::create_directories(modelsDir);
+
+    info("Generating unified C++ DB client in src/models/db.h ...");
+
+    // Clean up old individual files if they exist to prevent clutter
+    for (const auto& model : models) {
+        std::string filename = model.name;
+        std::transform(filename.begin(), filename.end(), filename.begin(), ::tolower);
+        fs::remove(modelsDir / (filename + ".h"));
+    }
+    fs::remove(modelsDir / "schema_sync.h");
+
+    fs::path dbHeaderPath = modelsDir / "db.h";
+    std::ofstream dbOut(dbHeaderPath);
+    if (!dbOut.is_open()) {
+        error("Failed to write db.h: " + dbHeaderPath.string());
+        return 1;
+    }
+
+    dbOut << "#pragma once\n";
+    dbOut << "#include <xpresspp/xpresspp.h>\n";
+    dbOut << "#include <string>\n";
+    dbOut << "#include <vector>\n\n";
+
+    // 1. Output C++ Model Classes
+    for (const auto& model : models) {
+        dbOut << "class " << model.name << " : public xp::Model<" << model.name << "> {\n";
+        dbOut << "public:\n";
+        dbOut << "    using xp::Model<" << model.name << ">::create;\n\n";
+        dbOut << "    static std::string tableName() { return \"" << model.tableName << "\"; }\n\n";
+        dbOut << "    static xp::Schema schema() {\n";
+        dbOut << "        return {\n";
+
+        bool firstField = true;
+        for (const auto& f : model.fields) {
+            if (f.isRelation) continue;
+
+            if (!firstField) dbOut << ",\n";
+            firstField = false;
+
+            std::string cppType = "xp::FieldType::Text";
+            if (f.type == "Serial") cppType = "xp::FieldType::Serial";
+            else if (f.type == "Int") cppType = "xp::FieldType::Integer";
+            else if (f.type == "Boolean") cppType = "xp::FieldType::Boolean";
+            else if (f.type == "Float") cppType = "xp::FieldType::Double";
+            else if (f.type == "DateTime") cppType = "xp::FieldType::Timestamp";
+
+            std::string options = "xp::FieldOption::None";
+            if (f.isPrimaryKey) {
+                options = "xp::FieldOption::PrimaryKey";
+            } else {
+                std::vector<std::string> opts;
+                if (!f.nullable) opts.push_back("xp::FieldOption::NotNull");
+                if (f.isUnique) opts.push_back("xp::FieldOption::Unique");
+                if (f.isDefaultNow) opts.push_back("xp::FieldOption::DefaultNow");
+
+                if (!opts.empty()) {
+                    options = opts[0];
+                    for (size_t i = 1; i < opts.size(); ++i) {
+                        options += " | " + opts[i];
+                    }
+                }
+            }
+
+            dbOut << "            {\"" << f.name << "\", " << cppType << ", " << options << "}";
+        }
+        dbOut << "\n        };\n";
+        dbOut << "    }\n\n";
+
+        // Generate findBy[FieldName] for Unique / PrimaryKey fields
+        for (const auto& f : model.fields) {
+            if (f.isRelation) continue;
+            if (f.isUnique || f.isPrimaryKey) {
+                std::string capName = f.name;
+                if (!capName.empty()) capName[0] = std::toupper(capName[0]);
+
+                std::string paramType = "const std::string&";
+                if (f.type == "Serial" || f.type == "Int") paramType = "int64_t";
+                else if (f.type == "Float") paramType = "double";
+                else if (f.type == "Boolean") paramType = "bool";
+
+                dbOut << "    static drogon::Task<Json::Value> findBy" << capName << "(" << paramType << " val) {\n";
+                dbOut << "        Json::Value where;\n";
+                dbOut << "        where[\"" << f.name << "\"] = val;\n";
+                dbOut << "        co_return co_await findUnique(where);\n";
+                dbOut << "    }\n\n";
+            }
+        }
+
+        // Generate user create shortcut helper if model has username & password fields
+        bool hasUsername = false;
+        bool hasPassword = false;
+        for (const auto& f : model.fields) {
+            if (f.name == "username") hasUsername = true;
+            if (f.name == "password") hasPassword = true;
+        }
+        if (hasUsername && hasPassword) {
+            dbOut << "    static drogon::Task<void> create(const std::string& username, const std::string& password) {\n";
+            dbOut << "        Json::Value data;\n";
+            dbOut << "        data[\"username\"] = username;\n";
+            dbOut << "        data[\"password\"] = password;\n";
+            dbOut << "        co_await xp::Model<" << model.name << ">::create(data);\n";
+            dbOut << "    }\n\n";
+        }
+
+        dbOut << "};\n\n";
+    }
+
+    // 2. Output Model Clients
+    for (const auto& model : models) {
+        dbOut << "struct " << model.name << "Client {\n";
+        dbOut << "    drogon::Task<void> create(const Json::Value& data) const {\n";
+        dbOut << "        co_await ::" << model.name << "::create(data);\n";
+        dbOut << "    }\n\n";
+
+        // Create overload if model has username & password
+        bool hasUsername = false;
+        bool hasPassword = false;
+        for (const auto& f : model.fields) {
+            if (f.name == "username") hasUsername = true;
+            if (f.name == "password") hasPassword = true;
+        }
+        if (hasUsername && hasPassword) {
+            dbOut << "    drogon::Task<void> create(const std::string& username, const std::string& password) const {\n";
+            dbOut << "        co_await ::" << model.name << "::create(username, password);\n";
+            dbOut << "    }\n\n";
+        }
+
+        dbOut << "    drogon::Task<Json::Value> findUnique(const Json::Value& where) const {\n";
+        dbOut << "        co_return co_await ::" << model.name << "::findUnique(where);\n";
+        dbOut << "    }\n\n";
+
+        dbOut << "    drogon::Task<Json::Value> findMany(const Json::Value& where = Json::Value()) const {\n";
+        dbOut << "        co_return co_await ::" << model.name << "::findMany(where);\n";
+        dbOut << "    }\n\n";
+
+        dbOut << "    drogon::Task<Json::Value> findFirst(const Json::Value& where) const {\n";
+        dbOut << "        co_return co_await ::" << model.name << "::findUnique(where);\n";
+        dbOut << "    }\n\n";
+
+        dbOut << "    drogon::Task<void> update(const Json::Value& where, const Json::Value& data) const {\n";
+        dbOut << "        co_await ::" << model.name << "::update(where, data);\n";
+        dbOut << "    }\n\n";
+
+        dbOut << "    drogon::Task<void> deleteMany(const Json::Value& where) const {\n";
+        dbOut << "        co_await ::" << model.name << "::deleteMany(where);\n";
+        dbOut << "    }\n\n";
+
+        // FindBy[FieldName] helpers
+        for (const auto& f : model.fields) {
+            if (f.isRelation) continue;
+            if (f.isUnique || f.isPrimaryKey) {
+                std::string capName = f.name;
+                if (!capName.empty()) capName[0] = std::toupper(capName[0]);
+
+                std::string paramType = "const std::string&";
+                if (f.type == "Serial" || f.type == "Int") paramType = "int64_t";
+                else if (f.type == "Float") paramType = "double";
+                else if (f.type == "Boolean") paramType = "bool";
+
+                dbOut << "    drogon::Task<Json::Value> findBy" << capName << "(" << paramType << " val) const {\n";
+                dbOut << "        co_return co_await ::" << model.name << "::findBy" << capName << "(val);\n";
+                dbOut << "    }\n\n";
+            }
+        }
+
+        dbOut << "};\n\n";
+    }
+
+    // 3. Write the unified PrismaClient struct
+    dbOut << "struct PrismaClient {\n";
+    for (const auto& model : models) {
+        std::string camelName = model.name;
+        if (!camelName.empty()) camelName[0] = std::tolower(camelName[0]);
+        dbOut << "    " << model.name << "Client " << camelName << ";\n";
+    }
+    dbOut << "};\n\n";
+    dbOut << "inline constexpr PrismaClient prisma{};\n\n";
+
+    // 4. Write SchemaSync inside db.h
+    dbOut << "class SchemaSync {\n";
+    dbOut << "public:\n";
+    dbOut << "    static drogon::Task<void> syncAll() {\n";
+    for (const auto& model : models) {
+        dbOut << "        co_await ::" << model.name << "::sync();\n";
+    }
+    dbOut << "        co_return;\n";
+    dbOut << "    }\n";
+    dbOut << "};\n";
+
+    success("Generated unified Prisma-like client in src/models/db.h");
+    divider();
+    success("Migration structures generated successfully! You can now use 'prisma' in your controllers and SchemaSync::syncAll() in your DB configuration.");
+    return 0;
+}
+
 } // namespace xp::cli

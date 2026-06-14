@@ -6,4 +6,4 @@
 
 // Express-like coroutine syntax sugar macros
 #define await co_await
-#define async -> ::xp::Task
+#define async -> ::xp::Task<void>

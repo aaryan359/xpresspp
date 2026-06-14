@@ -84,6 +84,7 @@ void usage() {
         << "    xp create  <app-name>   Create a new Xpress++ project\n"
         << "    xp build   [--release]  Compile the current project\n"
         << "    xp run     [--release]  Build and run the server\n"
+        << "    xp migrate              Generate C++ models and synchronize database schema\n"
         << "    xp watch                Auto-rebuild on source changes\n"
         << "    xp clean                Delete the build directory\n"
         << "    xp install              Auto-install all dependencies (Drogon etc.)\n"

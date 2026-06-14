@@ -12,5 +12,6 @@ int watch();
 int doctor();
 int installDeps();
 int clean();
+int migrate();
 
 } // namespace xp::cli

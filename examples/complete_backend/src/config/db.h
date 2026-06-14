@@ -6,7 +6,7 @@
 class Database {
     public:
     // Configures the connection pool using a database URL and schedules table initialization
-    static void connect(xp::App& app) {
+    void connect(xp::App& app) {
         // Can connect to any local or cloud instance using a clean connection string URL!
         std::string db_url = "postgresql://postgres:password@127.0.0.1:5450/xpresspp";
         

@@ -1,26 +1,33 @@
 #include <xpresspp/xpresspp.h>
 #include "src/routes/index.h"
 
+// ─────────────────────────────────────────────────────────────────
+//  Add more route files here, exactly like Express:
+//
+//  #include "src/routes/auth.h"    → app.use("/api/auth", routes::authRoutes());
+//  #include "src/routes/users.h"   → app.use("/api/users", routes::userRoutes());
+// ─────────────────────────────────────────────────────────────────
+
 int main() {
-    // Load .env file before anything else
+    // Load .env file first — reads PORT, JWT_SECRET, DATABASE_URL, etc.
     xp::loadEnv();
 
     xp::App app;
 
-    // ── Middleware ────────────────────────────────────────────
+    // ── Global Middleware ─────────────────────────────────────
     app.use(xp::logger());
     app.use(xp::cors());
 
-    // ── Routes ───────────────────────────────────────────────
-    app.group("/api", [](xp::Router& r) {
-        routes::registerIndex(r);
-    });
+    // ── Mount Routers ─────────────────────────────────────────
+    // Same as: app.use('/api', indexRouter)  in Express
+    app.use("/api", routes::indexRoutes());
 
     // Root
     app.get("/", [](xp::Request& req, xp::Response& res) {
         res.html(R"(
             <h1>Xpress++ is running 🚀</h1>
-            <p>Edit <code>src/routes/index.h</code> to add your routes.</p>
+            <p>Add routes in <code>src/routes/</code>.</p>
+            <p>Mount them with <code>app.use("/prefix", routes::myRoutes())</code>.</p>
             <p>Run <code>xp watch</code> for live reload.</p>
         )");
     });

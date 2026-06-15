@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
+  base: '/xpresspp/',
   title: 'Xpress++',
   description: 'Dragon-speed, Express-style C++ web framework — complete documentation.',
   cleanUrls: true,

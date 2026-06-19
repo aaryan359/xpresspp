@@ -49,8 +49,18 @@ private:
     };
 
     std::vector<Route> routes_;
+    std::vector<Middleware> middleware_;
     bool case_sensitive_ = true;
     bool strict_trailing_slash_ = true;
+
+    static std::vector<Middleware> combineMiddleware(const std::vector<Middleware>& first,
+                                                     const std::vector<Middleware>& second) {
+        std::vector<Middleware> combined;
+        combined.reserve(first.size() + second.size());
+        combined.insert(combined.end(), first.begin(), first.end());
+        combined.insert(combined.end(), second.begin(), second.end());
+        return combined;
+    }
 
     static std::string joinPaths(const std::string& prefix, const std::string& path) {
         if (prefix.empty() || prefix == "/") {
@@ -152,20 +162,26 @@ public:
             path,
             compilePath(path, param_names, case_sensitive_, strict_trailing_slash_),
             std::move(param_names),
-            std::move(middleware),
+            combineMiddleware(middleware_, middleware),
             std::move(target)
         });
+    }
+
+    Router& use(Middleware middleware) {
+        middleware_.push_back(std::move(middleware));
+        return *this;
     }
 
     void use(const std::string& prefix, const Router& router) {
         for (const auto& route : router.routes_) {
             std::vector<std::string> param_names;
+            const auto mounted_path = joinPaths(prefix, route.path);
             routes_.push_back(Route{
                 route.method,
-                joinPaths(prefix, route.path),
-                compilePath(joinPaths(prefix, route.path), param_names, case_sensitive_, strict_trailing_slash_),
+                mounted_path,
+                compilePath(mounted_path, param_names, case_sensitive_, strict_trailing_slash_),
                 std::move(param_names),
-                route.middleware,
+                combineMiddleware(middleware_, route.middleware),
                 route.handler
             });
         }

@@ -236,11 +236,10 @@ main() {
     echo -e "  Run your first project:"
     echo -e "${CYAN}    xp create my-api${RESET}"
     echo -e "${CYAN}    cd my-api${RESET}"
-    echo -e "${CYAN}    xp run${RESET}"
+    echo -e "${CYAN}    xp dev${RESET}"
     echo ""
 
     ensure_path
 }
 
 main
-

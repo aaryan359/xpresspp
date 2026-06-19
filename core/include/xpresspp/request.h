@@ -11,8 +11,10 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 
+#include "errors.h"
 #include "validation.h"
 
 namespace xp {
@@ -111,6 +113,15 @@ public:
         return native_request_->getParameter(key);
     }
 
+    std::string query(const std::string& key, const std::string& default_value) const {
+        const auto value = query(key);
+        return value.empty() ? default_value : value;
+    }
+
+    std::string query(const std::string& key, const char* default_value) const {
+        return query(key, std::string(default_value));
+    }
+
     std::unordered_map<std::string, std::string> query() const {
         std::unordered_map<std::string, std::string> result;
         for (const auto& item : native_request_->getParameters()) {
@@ -122,6 +133,18 @@ public:
     std::string body() const {
         const auto body_view = native_request_->getBody();
         return std::string(body_view.data(), body_view.size());
+    }
+
+    template <typename T>
+    T body() const {
+        if constexpr (std::is_same_v<T, std::string>) {
+            return body();
+        } else if constexpr (std::is_same_v<T, Json::Value>) {
+            return json();
+        } else {
+            static_assert(std::is_same_v<T, std::string> || std::is_same_v<T, Json::Value>,
+                          "req.body<T>() currently supports std::string and Json::Value.");
+        }
     }
 
     Json::Value json() const {
@@ -244,6 +267,23 @@ public:
     std::string param(const std::string& key) const {
         auto it = params_.find(key);
         return it == params_.end() ? "" : it->second;
+    }
+
+    std::string param(const std::string& key, const std::string& default_value) const {
+        const auto value = param(key);
+        return value.empty() ? default_value : value;
+    }
+
+    std::string param(const std::string& key, const char* default_value) const {
+        return param(key, std::string(default_value));
+    }
+
+    std::string param(const std::string& key, bool required) const {
+        const auto value = param(key);
+        if (required && value.empty()) {
+            throw BadRequestError("Missing route parameter: " + key);
+        }
+        return value;
     }
 
     const std::unordered_map<std::string, std::string>& params() const {

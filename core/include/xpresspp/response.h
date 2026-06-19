@@ -141,6 +141,20 @@ public:
         return json(root);
     }
 
+    Response& ok(const Json::Value& value) {
+        status(200);
+        return json(value);
+    }
+
+    Response& ok(std::initializer_list<std::pair<std::string, Json::Value>> items) {
+        status(200);
+        return json(items);
+    }
+
+    Response& error(const std::string& message, int code = 500) {
+        return status(code).json({{"status", "error"}, {"message", message}});
+    }
+
     Response& json(const std::unordered_map<std::string, std::string>& items) {
         Json::Value root;
         for (const auto& item : items) {

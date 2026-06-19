@@ -70,30 +70,31 @@ brew install cmake jsoncpp openssl drogon
 
 ## Quick start
 
-### 1. Clone the repo
+### 1. Install the CLI
 
 ```bash
-git clone https://github.com/aaryan359/xpresspp
-cd xpresspp
+curl -fsSL https://raw.githubusercontent.com/aaryan359/xpresspp/main/install.sh | bash
 ```
 
-### 2. Build and install the CLI
-
-```bash
-cmake -S cli -B cli/build -DCMAKE_BUILD_TYPE=Release
-cmake --build cli/build
-sudo cp cli/build/xp /usr/local/bin/xp
-```
-
-### 3. Create your first app
+### 2. Create your first app
 
 ```bash
 xp create my-api
 cd my-api
-xp run
+xp dev
 ```
 
 Your server is now running at `http://localhost:8080`.
+
+### Manual install from source
+
+```bash
+git clone https://github.com/aaryan359/xpresspp
+cd xpresspp
+cmake -S cli -B cli/build -DCMAKE_BUILD_TYPE=Release
+cmake --build cli/build
+sudo cp cli/build/xp /usr/local/bin/xp
+```
 
 ### 4. Test it
 
@@ -110,11 +111,16 @@ The `xp` command handles all the CMake work for you.
 | Command | What it does |
 |---------|-------------|
 | `xp create <name>` | Create a new project |
+| `xp dev` | Build, run, and restart on source changes |
+| `xp generate route <name>` | Generate a router file |
+| `xp generate controller <name>` | Generate a controller file |
+| `xp generate middleware <name>` | Generate a middleware file |
+| `xp generate model <name>` | Generate a model file |
 | `xp build` | Compile in debug mode |
 | `xp build --release` | Compile with optimisations |
 | `xp run` | Build and run the server |
 | `xp run --release` | Build (release) and run |
-| `xp watch` | Rebuild automatically on file changes |
+| `xp watch` | Alias for `xp dev` |
 | `xp clean` | Delete the build directory |
 | `xp doctor` | Check all system dependencies |
 

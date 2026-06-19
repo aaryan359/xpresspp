@@ -644,9 +644,12 @@ public:
                     req.setParam(p.first, p.second);
                 }
 
-                if (std::holds_alternative<SyncHandler>(route.handler)) {
-                    std::get<SyncHandler>(route.handler)(req, res);
-                } else {
+                auto invoke_handler = [this, route](Request& req, Response& res) mutable {
+                    if (std::holds_alternative<SyncHandler>(route.handler)) {
+                        std::get<SyncHandler>(route.handler)(req, res);
+                        return;
+                    }
+
                     auto* ctx = current_request_context.get();
                     if (ctx) {
                         auto coro_h = std::get<CoroHandler>(route.handler);
@@ -664,7 +667,23 @@ public:
                         };
                         launch();
                     }
+                };
+
+                if (route.middleware.empty()) {
+                    invoke_handler(req, res);
+                    return;
                 }
+
+                auto ctx = current_request_context;
+                if (!ctx) {
+                    invoke_handler(req, res);
+                    return;
+                }
+
+                auto final_route_call = [invoke_handler](std::shared_ptr<RequestContext>& r_ctx) mutable {
+                    invoke_handler(r_ctx->req, r_ctx->res);
+                };
+                runMiddlewareStack(route.middleware, 0, ctx, final_route_call);
             }
         );
         return *this;

@@ -22,10 +22,22 @@ int main(int argc, char** argv) {
         return xp::cli::createApp(argv[2]);
     }
 
+    if (command == "generate" || command == "g") {
+        if (argc < 4) {
+            xp::cli::error("Missing generator type or name.",
+                           "",
+                           "xp generate route users\n"
+                           "xp g middleware auth");
+            return 1;
+        }
+        return xp::cli::generate(argv[2], argv[3]);
+    }
+
     if (command == "build")   return xp::cli::build(release);
     if (command == "run")     return xp::cli::run(release);
     if (command == "migrate") return xp::cli::migrate();
     if (command == "watch")   return xp::cli::watch();
+    if (command == "dev")     return xp::cli::watch();
     if (command == "clean")   return xp::cli::clean();
     if (command == "install") return xp::cli::installDeps();
     if (command == "doctor") {

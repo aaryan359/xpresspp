@@ -7,6 +7,8 @@
 #include <chrono>
 #include <thread>
 #include <sstream>
+#include <algorithm>
+#include <cctype>
 
 #if !defined(_WIN32)
 #include <signal.h>
@@ -162,7 +164,7 @@ int createApp(const std::string& name) {
         << colour::cyan()
         << "    cd " << name << "\n"
         << "    cp .env.example .env      # set your config\n"
-        << "    xp watch                  # build, run, and live-reload\n"
+        << "    xp dev                    # build, run, and live-reload\n"
         << colour::reset()
         << "\n"
         << colour::dim()
@@ -171,6 +173,179 @@ int createApp(const std::string& name) {
         << colour::reset()
         << "\n";
     return 0;
+}
+
+// ============================================================
+//  Generate Command
+// ============================================================
+static std::string toIdentifier(std::string value) {
+    for (auto& c : value) {
+        if (!std::isalnum(static_cast<unsigned char>(c))) {
+            c = '_';
+        }
+    }
+    if (value.empty() || std::isdigit(static_cast<unsigned char>(value.front()))) {
+        value = "_" + value;
+    }
+    return value;
+}
+
+static std::string toPascal(std::string value) {
+    std::string result;
+    bool upper_next = true;
+    for (char c : value) {
+        if (!std::isalnum(static_cast<unsigned char>(c))) {
+            upper_next = true;
+            continue;
+        }
+        if (upper_next) {
+            result.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(c))));
+            upper_next = false;
+        } else {
+            result.push_back(c);
+        }
+    }
+    if (result.empty()) result = "Generated";
+    if (std::isdigit(static_cast<unsigned char>(result.front()))) {
+        result = "Generated" + result;
+    }
+    return result;
+}
+
+static std::string toSnake(std::string value) {
+    std::string result;
+    bool previous_sep = false;
+    for (char c : value) {
+        if (std::isalnum(static_cast<unsigned char>(c))) {
+            result.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+            previous_sep = false;
+        } else if (!previous_sep && !result.empty()) {
+            result.push_back('_');
+            previous_sep = true;
+        }
+    }
+    while (!result.empty() && result.back() == '_') result.pop_back();
+    return result.empty() ? "generated" : result;
+}
+
+static int writeGeneratedFile(const fs::path& path, const std::string& contents) {
+    if (fs::exists(path)) {
+        error("Refusing to overwrite existing file.", path.string(),
+              "Choose a different name or edit the existing file.");
+        return 1;
+    }
+
+    fs::create_directories(path.parent_path());
+    std::ofstream output(path);
+    if (!output) {
+        error("Failed to write generated file.", path.string(),
+              "Check write permissions for this project.");
+        return 1;
+    }
+    output << contents;
+    success("Created " + path.string());
+    return 0;
+}
+
+int generate(const std::string& raw_type, const std::string& raw_name) {
+    std::string reason;
+    if (!isXpressProject(&reason)) {
+        error("Not an Xpress++ project directory.", reason,
+              "Run this command from inside your project folder.");
+        return 1;
+    }
+
+    std::string type = raw_type;
+    std::transform(type.begin(), type.end(), type.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+
+    const auto snake = toSnake(raw_name);
+    const auto ident = toIdentifier(snake);
+    const auto pascal = toPascal(raw_name);
+
+    if (type == "route" || type == "routes") {
+        const fs::path path = fs::path("src") / "routes" / (snake + ".h");
+        std::ostringstream body;
+        body
+            << "#pragma once\n\n"
+            << "#include <xpresspp/xpresspp.h>\n\n"
+            << "inline xp::Router " << ident << "Routes() {\n"
+            << "    xp::Router router;\n\n"
+            << "    router.get(\"/\", [](xp::Request& req, xp::Response& res) {\n"
+            << "        res.ok({{\"resource\", \"" << snake << "\"}});\n"
+            << "    });\n\n"
+            << "    router.post(\"/\", [](xp::Request& req, xp::Response& res) {\n"
+            << "        const auto body = req.json();\n"
+            << "        res.created({{\"created\", true}, {\"data\", body}});\n"
+            << "    });\n\n"
+            << "    return router;\n"
+            << "}\n";
+        const int rc = writeGeneratedFile(path, body.str());
+        if (rc == 0) {
+            std::cout << colour::dim()
+                      << "  Mount it with: app.use(\"/" << snake << "\", " << ident << "Routes());\n"
+                      << colour::reset();
+        }
+        return rc;
+    }
+
+    if (type == "controller" || type == "controllers") {
+        const fs::path path = fs::path("src") / "controllers" / (snake + "_controller.h");
+        std::ostringstream body;
+        body
+            << "#pragma once\n\n"
+            << "#include <xpresspp/xpresspp.h>\n\n"
+            << "struct " << pascal << "Controller {\n"
+            << "    static void index(xp::Request& req, xp::Response& res) {\n"
+            << "        res.ok({{\"resource\", \"" << snake << "\"}});\n"
+            << "    }\n\n"
+            << "    static void show(xp::Request& req, xp::Response& res) {\n"
+            << "        res.ok({{\"id\", req.param(\"id\", true)}});\n"
+            << "    }\n"
+            << "};\n";
+        return writeGeneratedFile(path, body.str());
+    }
+
+    if (type == "middleware" || type == "mw") {
+        const fs::path path = fs::path("src") / "middleware" / (snake + ".h");
+        std::ostringstream body;
+        body
+            << "#pragma once\n\n"
+            << "#include <xpresspp/xpresspp.h>\n\n"
+            << "inline xp::Middleware " << ident << "() {\n"
+            << "    return [](xp::Request& req, xp::Response& res, xp::Next next) {\n"
+            << "        next();\n"
+            << "    };\n"
+            << "}\n";
+        return writeGeneratedFile(path, body.str());
+    }
+
+    if (type == "model" || type == "models") {
+        const fs::path path = fs::path("src") / "models" / (snake + ".h");
+        std::ostringstream body;
+        body
+            << "#pragma once\n\n"
+            << "#include <json/json.h>\n"
+            << "#include <string>\n\n"
+            << "struct " << pascal << " {\n"
+            << "    int id = 0;\n"
+            << "    std::string name;\n\n"
+            << "    Json::Value toJson() const {\n"
+            << "        Json::Value value;\n"
+            << "        value[\"id\"] = id;\n"
+            << "        value[\"name\"] = name;\n"
+            << "        return value;\n"
+            << "    }\n"
+            << "};\n";
+        return writeGeneratedFile(path, body.str());
+    }
+
+    error("Unknown generator type: \"" + raw_type + "\"",
+          "Supported types: route, controller, middleware, model.",
+          "xp generate route users\n"
+          "xp g middleware auth");
+    return 1;
 }
 
 // ============================================================

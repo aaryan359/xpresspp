@@ -6,6 +6,7 @@
 namespace xp::cli {
 
 int createApp(const std::string& name);
+int generate(const std::string& type, const std::string& name);
 int build(bool release);
 int run(bool release);
 int watch();

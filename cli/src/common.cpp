@@ -82,10 +82,13 @@ void usage() {
         << colour::bold() << "  Usage:\n" << colour::reset()
         << colour::dim()
         << "    xp create  <app-name>   Create a new Xpress++ project\n"
+        << "    xp dev                  Build, run, and restart on source changes\n"
+        << "    xp generate <type> <n>  Generate route, controller, middleware, or model\n"
+        << "    xp g        <type> <n>  Short alias for generate\n"
         << "    xp build   [--release]  Compile the current project\n"
         << "    xp run     [--release]  Build and run the server\n"
         << "    xp migrate              Generate C++ models and synchronize database schema\n"
-        << "    xp watch                Auto-rebuild on source changes\n"
+        << "    xp watch                Alias for xp dev\n"
         << "    xp clean                Delete the build directory\n"
         << "    xp install              Auto-install all dependencies (Drogon etc.)\n"
         << "    xp doctor               Check system dependencies\n"

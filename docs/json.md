@@ -1,53 +1,126 @@
-# JSON
+# JSON & Dynamic Types (`xp::var`)
 
-Xpress++ uses [jsoncpp](https://github.com/open-source-parsers/jsoncpp) for JSON parsing and serialisation. Everything is built in — no extra setup needed.
+Xpress++ features a custom JSON wrapper type called **`xp::var`**. This type inherits from [jsoncpp](https://github.com/open-source-parsers/jsoncpp)'s `Json::Value` but adds implicit conversion operators, allowing you to write clean C++ code that reads and acts exactly like JavaScript/Node.js.
 
-## Reading JSON from a request
+---
 
+## 1. Dynamic Variables with `auto`
+
+Normally in C++, extracting values from a JSON object requires calling verbose methods like `.asString()` or `.asInt()`. With Xpress++, `req.json()` returns an `xp::var` instance. You can assign fields directly to core C++ types or use `auto` and rely on implicit conversions.
+
+### Traditional Verbose C++:
 ```cpp
 app.post("/users", [](xp::Request& req, xp::Response& res) {
-    const auto body = req.json();  // returns Json::Value
+    const auto body = req.json();
 
-    // Read fields
-    const auto name  = body["name"].asString();
-    const auto age   = body["age"].asInt();
-    const auto admin = body["admin"].asBool();
-    const auto score = body["score"].asDouble();
+    const std::string name = body["name"].asString();
+    const int age          = body["age"].asInt();
+    const bool admin       = body["admin"].asBool();
+    const double score     = body["score"].asDouble();
 
     res.json({{"received", name}});
 });
 ```
 
-::: tip Check field existence first
-Use `body.isMember("fieldName")` before reading to avoid exceptions on missing fields.
-:::
+### Clean Xpress++ Way (Implicit Conversions):
+```cpp
+app.post("/users", [](xp::Request& req, xp::Response& res) {
+    // 1. Deduces to xp::var
+    auto body = req.json();
+
+    // 2. Implicit conversion to core types! No .asString() / .asInt() needed.
+    std::string name = body["name"];
+    int age          = body["age"];
+    bool admin       = body["admin"];
+    double score     = body["score"];
+
+    res.json({{"received", name}});
+});
+```
+
+### Using `auto` vs. Explicit Types
+
+You can use either explicit types (`std::string`, `int`, etc.) or `auto`. Both are valid, but behave slightly differently:
+
+#### 1. Using `auto` (Deferred Conversion)
+If you declare variables using `auto`, the type is deduced as `xp::var`. The actual conversion will happen automatically later when you pass the variable to a function expecting a specific type:
+
+```cpp
+auto username = body["username"]; // Deduces to xp::var
+auto age      = body["age"];      // Deduces to xp::var
+
+// Pass directly to functions; implicit casting happens at the call site:
+someFunctionExpectingString(username); 
+someFunctionExpectingInt(age);
+```
+
+#### 2. Using Explicit Types (Immediate Conversion)
+If you declare variables with explicit C++ types, the conversion happens immediately:
+
+```cpp
+std::string username = body["username"]; // Converts to std::string immediately
+int age              = body["age"];      // Converts to int immediately
+```
+
+> [!NOTE]
+> The only time you must use explicit types (or casts) is when performing operations where the compiler cannot determine the target type automatically, such as concatenating strings directly:
+> ```cpp
+> // ❌ Error: Compiler doesn't know if you want string or numeric addition
+> auto val = body["name"] + " suffix"; 
+> 
+> //  Correct:
+> std::string val = body["name"];
+> val += " suffix";
+> ```
 
 ---
 
-## Reading nested objects and arrays
+## 2. Reading Nested Objects and Arrays
+
+Because `xp::var` overrides `operator[]` to return another `xp::var` instance, chained lookups preserve dynamic typing and implicit conversion:
 
 ```cpp
-const auto body = req.json();
+auto body = req.json();
 
-// Nested object
-const auto city = body["address"]["city"].asString();
+// Nested lookup converts implicitly
+std::string city = body["address"]["city"];
 
-// Array
+// Iterate over arrays
 for (const auto& tag : body["tags"]) {
-    std::cout << tag.asString() << "\n";
+    // tag is deduced as xp::var, converts implicitly to std::string
+    std::string tagName = tag;
+    std::cout << tagName << "\n";
 }
 
 // Array size
-const auto count = body["items"].size();
+size_t count = body["items"].size();
 ```
 
 ---
 
-## Sending JSON responses
+## 3. Implicit Casting Rules
 
-### Inline initializer list (simplest)
+When converting `xp::var` to C++ primitive types, conversions are resilient to prevent server crashes:
 
+*   **To `std::string`**:
+    *   Null values convert to `""`.
+    *   JSON strings, numbers, and booleans convert to their string representations.
+*   **To `int` / `double`**:
+    *   Null values convert to `0` / `0.0`.
+    *   Numeric values convert directly.
+    *   JSON string values like `"42"` or `"12.34"` are automatically parsed using `std::stoi` / `std::stod` under the hood. If parsing fails, they fall back to `0` / `0.0` safely.
+*   **To `bool`**:
+    *   Null values convert to `false`.
+    *   Booleans and non-zero numbers convert directly.
+    *   Strings like `"true"`, `"1"`, or `"yes"` convert to `true`. All other strings convert to `false`.
+
+---
+
+## 4. Sending JSON Responses
+
+### Inline initializer list using `xp::obj` / `xp::arr` (simplest)
 ```cpp
+// res.json takes an xp::obj/xp::var initializer list
 res.json({
     {"id",     42},
     {"name",   "Alice"},
@@ -55,10 +128,9 @@ res.json({
 });
 ```
 
-### Building a `Json::Value` manually
-
+### Building a `Json::Value` / `xp::var` manually:
 ```cpp
-Json::Value user;
+xp::var user;
 user["id"]    = 42;
 user["name"]  = "Alice";
 user["email"] = "alice@example.com";
@@ -66,94 +138,31 @@ user["email"] = "alice@example.com";
 res.json(user);
 ```
 
-### Arrays
-
+### Nesting with `xp::obj` and `xp::arr`:
 ```cpp
-Json::Value users(Json::arrayValue);
-
-Json::Value user1;
-user1["id"]   = 1;
-user1["name"] = "Alice";
-users.append(user1);
-
-Json::Value user2;
-user2["id"]   = 2;
-user2["name"] = "Bob";
-users.append(user2);
-
-res.json(users);
-```
-
-Response:
-
-```json
-[
-  {"id": 1, "name": "Alice"},
-  {"id": 2, "name": "Bob"}
-]
-```
-
-### JavaScript-like JSON Builders (`xp::array`, `xp::object`, `xp::number`, `xp::boolean`, `xp::null`)
-
-To quickly serialize standard C++ containers (like `std::initializer_list` or `std::vector`) or write clean, nested JSON objects similar to JavaScript, use the built-in creator helpers:
-
-```cpp
-// 1. Arrays (from initializer lists or vectors)
-auto arr = xp::array({1, 2, 3, 4});
-
-// 2. Objects (from key-value pairs)
-auto obj = xp::object({
-    {"key", "value"},
-    {"nested", xp::object({"inner_key", "inner_value"})}
-});
-
-// 3. Primitives
-auto num = xp::number(42);
-auto boolean = xp::boolean(true);
-auto empty = xp::null();
-
-// 4. Combined directly in res.json()
 res.json({
     {"status", "healthy"},
-    {"payload", xp::object({
-        {"items", xp::array({1, 2, 3})},
-        {"metadata", xp::object({{"count", 3}})}
+    {"payload", xp::obj({
+        {"items", xp::arr({1, 2, 3})},
+        {"metadata", xp::obj({{"count", 3}})}
     })}
 });
 ```
 
 ---
 
-## Checking types safely
+## 5. jsoncpp Compatibility Reference
 
-```cpp
-const auto body = req.json();
+Because `xp::var` inherits from `Json::Value`, all standard jsoncpp verification methods remain fully supported:
 
-if (!body.isMember("name") || !body["name"].isString()) {
-    throw xp::BadRequestError("'name' must be a string.");
-}
-if (!body.isMember("age") || !body["age"].isInt()) {
-    throw xp::BadRequestError("'age' must be an integer.");
-}
-```
-
----
-
-## jsoncpp type conversion reference
-
-| Method | C++ type | JSON type |
-|--------|----------|-----------|
-| `.asString()` | `std::string` | string |
-| `.asInt()` | `int` | number |
-| `.asInt64()` | `int64_t` | number |
-| `.asUInt()` | `unsigned int` | number |
-| `.asDouble()` | `double` | number |
-| `.asBool()` | `bool` | boolean |
-| `.isNull()` | `bool` | `null` check |
-| `.isMember(key)` | `bool` | Object key check |
-| `.size()` | `size_t` | Array/object length |
-| `.isArray()` | `bool` | Array type check |
-| `.isObject()` | `bool` | Object type check |
-| `.isString()` | `bool` | String type check |
-| `.isInt()` | `bool` | Int type check |
-| `.isBool()` | `bool` | Bool type check |
+| Method | Return Type | Description |
+|--------|-------------|-------------|
+| `.isNull()` | `bool` | Returns true if the field is null |
+| `.isMember(key)` | `bool` | Returns true if object has this key |
+| `.size()` | `size_t` | Length of array or number of object keys |
+| `.isArray()` | `bool` | True if the node is a JSON array |
+| `.isObject()` | `bool` | True if the node is a JSON object |
+| `.isString()` | `bool` | True if the node is a string |
+| `.isInt()` | `bool` | True if the node is a 32-bit signed integer |
+| `.isNumeric()` | `bool` | True if the node is a number |
+| `.isBool()` | `bool` | True if the node is a boolean |

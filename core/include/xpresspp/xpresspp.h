@@ -13,6 +13,7 @@
 #include "database.h"
 #include "orm.h"
 #include "test.h"
+#include "websocket.h"
 #include "middleware/cors.h"
 #include "middleware/rate_limit.h"
 #include "middleware/auth.h"

@@ -14,5 +14,6 @@ int doctor();
 int installDeps();
 int clean();
 int migrate();
+int dockerize();
 
 } // namespace xp::cli

@@ -24,6 +24,33 @@ private:
     drogon::HttpRequestPtr native_request_;
     std::unordered_map<std::string, std::string> params_;
 
+    ValidationResult validateData(const xp::var& data, std::initializer_list<std::pair<std::string, ValidationRule>> rules) const {
+        ValidationResult result;
+        for (const auto& pair : rules) {
+            const auto& name = pair.first;
+            const auto& rule = pair.second;
+
+            if (!data.isMember(name) || data[name].isNull()) {
+                if (rule.isRequired()) {
+                    result.error.message = !rule.requiredMsg().empty() ? rule.requiredMsg() : ("Field '" + name + "' is required");
+                    return result;
+                }
+                continue;
+            }
+
+            const auto& val = data[name];
+            for (const auto& check : rule.checks()) {
+                std::string err_msg = check(name, val);
+                if (!err_msg.empty()) {
+                    result.error.message = err_msg;
+                    return result;
+                }
+            }
+        }
+        result.body = data;
+        return result;
+    }
+
 public:
     // Request-scoped data store — same concept as Express req.locals.
     // Middleware can store any typed value; route handlers read it back.
@@ -295,41 +322,31 @@ public:
     }
 
     ValidationResult validate(std::initializer_list<std::pair<std::string, ValidationRule>> rules) const {
-        ValidationResult result;
         xp::var body_val;
         try {
             body_val = json();
         } catch (const std::exception& e) {
+            ValidationResult result;
             result.error.message = std::string("Invalid JSON body: ") + e.what();
             return result;
         }
+        return validateData(body_val, rules);
+    }
 
-        for (const auto& pair : rules) {
-            const auto& name = pair.first;
-            const auto& rule = pair.second;
-
-            if (!body_val.isMember(name) || body_val[name].isNull()) {
-                if (rule.isRequired()) {
-                    result.error.message = !rule.requiredMsg().empty() ? rule.requiredMsg() : ("Field '" + name + "' is required");
-                    return result;
-                }
-                continue;
-            }
-
-            const auto& val = body_val[name];
-            
-            // Run all validation checks sequentially
-            for (const auto& check : rule.checks()) {
-                std::string err_msg = check(name, val);
-                if (!err_msg.empty()) {
-                    result.error.message = err_msg;
-                    return result;
-                }
-            }
+    ValidationResult validateQuery(std::initializer_list<std::pair<std::string, ValidationRule>> rules) const {
+        xp::var query_val = xp::obj({});
+        for (const auto& [k, v] : query()) {
+            query_val[k] = v;
         }
+        return validateData(query_val, rules);
+    }
 
-        result.body = body_val;
-        return result;
+    ValidationResult validateParams(std::initializer_list<std::pair<std::string, ValidationRule>> rules) const {
+        xp::var params_val = xp::obj({});
+        for (const auto& [k, v] : params()) {
+            params_val[k] = v;
+        }
+        return validateData(params_val, rules);
     }
 
     const drogon::HttpRequestPtr& native() const {

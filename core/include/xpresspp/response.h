@@ -35,9 +35,7 @@ private:
     }
 
 public:
-    Response() : native_response_(drogon::HttpResponse::newHttpResponse()) {
-        native_response_->setStatusCode(drogon::k200OK);
-    }
+    Response() : native_response_(nullptr) {}
 
     explicit Response(drogon::HttpResponsePtr native_res)
         : native_response_(std::move(native_res)) {
@@ -46,8 +44,16 @@ public:
         }
     }
 
+    void ensureNative() {
+        if (!native_response_) {
+            native_response_ = drogon::HttpResponse::newHttpResponse();
+            native_response_->setStatusCode(static_cast<drogon::HttpStatusCode>(status_code_));
+        }
+    }
+
     Response& status(int code) {
         status_code_ = code;
+        ensureNative();
         native_response_->setStatusCode(static_cast<drogon::HttpStatusCode>(code));
         return *this;
     }
@@ -57,16 +63,19 @@ public:
     }
 
     Response& header(const std::string& key, const std::string& value) {
+        ensureNative();
         native_response_->addHeader(key, value);
         return *this;
     }
 
     Response& type(const std::string& content_type) {
+        ensureNative();
         native_response_->addHeader("Content-Type", content_type);
         return *this;
     }
 
     Response& send(std::string text) {
+        ensureNative();
         native_response_->setBody(std::move(text));
         native_response_->setContentTypeCode(drogon::CT_TEXT_PLAIN);
         sent_ = true;
@@ -74,6 +83,7 @@ public:
     }
 
     Response& send(const char* text) {
+        ensureNative();
         native_response_->setBody(text);
         native_response_->setContentTypeCode(drogon::CT_TEXT_PLAIN);
         sent_ = true;
@@ -89,6 +99,7 @@ public:
     }
 
     Response& html(std::string markup) {
+        ensureNative();
         native_response_->setBody(std::move(markup));
         native_response_->addHeader("Content-Type", "text/html; charset=utf-8");
         sent_ = true;
@@ -96,6 +107,7 @@ public:
     }
 
     Response& html(const char* markup) {
+        ensureNative();
         native_response_->setBody(markup);
         native_response_->addHeader("Content-Type", "text/html; charset=utf-8");
         sent_ = true;
@@ -103,6 +115,7 @@ public:
     }
 
     Response& json(const Json::Value& value) {
+        ensureNative();
         Json::StreamWriterBuilder writer;
         std::string json_str = Json::writeString(writer, value);
         native_response_->setBody(std::move(json_str));
@@ -165,6 +178,7 @@ public:
 
     Response& redirect(const std::string& url, int code = 302) {
         status(code);
+        ensureNative();
         native_response_->addHeader("Location", url);
         sent_ = true;
         return *this;
@@ -180,25 +194,27 @@ public:
                      bool http_only = true,
                      bool secure = false,
                      const std::string& same_site = "Lax") {
-        std::ostringstream cookie;
-        cookie << key << "=" << value << "; Path=/";
+        std::ostringstream cookie_stream;
+        cookie_stream << key << "=" << value << "; Path=/";
         if (max_age_seconds > 0) {
-            cookie << "; Max-Age=" << max_age_seconds;
+            cookie_stream << "; Max-Age=" << max_age_seconds;
         }
         if (http_only) {
-            cookie << "; HttpOnly";
+            cookie_stream << "; HttpOnly";
         }
         if (secure) {
-            cookie << "; Secure";
+            cookie_stream << "; Secure";
         }
         if (!same_site.empty()) {
-            cookie << "; SameSite=" << same_site;
+            cookie_stream << "; SameSite=" << same_site;
         }
-        native_response_->addHeader("Set-Cookie", cookie.str());
+        ensureNative();
+        native_response_->addHeader("Set-Cookie", cookie_stream.str());
         return *this;
     }
 
     Response& clearCookie(const std::string& key) {
+        ensureNative();
         native_response_->addHeader("Set-Cookie", key + "=; Path=/; Max-Age=0");
         return *this;
     }
@@ -233,11 +249,13 @@ public:
     }
 
     Response& location(const std::string& url) {
+        ensureNative();
         native_response_->addHeader("Location", url);
         return *this;
     }
 
     Response& noContent() {
+        ensureNative();
         native_response_->setBody("");
         status(204);
         sent_ = true;

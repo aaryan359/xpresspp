@@ -40,27 +40,38 @@ app.post("/users", [](xp::Request& req, xp::Response& res) {
 
 ### Using `auto` vs. Explicit Types
 
-You can use either explicit types (`string`, `int`, etc.) or `auto`. Both are valid, but behave slightly differently:
+You can choose to use either standard explicit C++ types or `auto`. Both approaches are fully supported but behave slightly differently under the hood:
 
-#### 1. Using `auto` (Deferred Conversion)
-If you declare variables using `auto`, the type is deduced as `xp::var`. The actual conversion will happen automatically later when you pass the variable to a function expecting a specific type:
+#### 1. Using Explicit Types (Immediate Conversion)
+If you declare variables with explicit types (such as `std::string`, `int`, `double`, or `bool`), the conversion from `xp::var` happens **immediately** using our implicit casting operators:
+
+```cpp
+std::string username = body["username"]; // Converts to std::string immediately
+int age              = body["age"];      // Converts to int immediately
+bool isAdmin         = body["admin"];    // Converts to bool immediately
+```
+
+> [!TIP]
+> **Is `std::string` or `string` preferred?**
+> Both are fully supported! Since `string` is just a standard alias for `std::string` in the `std` namespace, you can write `string` directly if you have `using namespace std;` in your file, or `std::string` otherwise. The `xp::var` implicit conversion works seamlessly with both because they are the same type.
+
+#### 2. Using `auto` (Deferred Conversion)
+If you declare variables using `auto`, the variable type is deduced as `xp::var`. This is highly beneficial if you want a dynamic workflow similar to JavaScript or Python where the type is resolved at the call site when passed to other functions:
 
 ```cpp
 auto username = body["username"]; // Deduces to xp::var
 auto age      = body["age"];      // Deduces to xp::var
 
-// Pass directly to functions; implicit casting happens at the call site:
+// Pass directly to functions expecting standard C++ types; 
+// the conversion happens automatically at the call site!
 someFunctionExpectingString(username); 
 someFunctionExpectingInt(age);
 ```
 
-#### 2. Using Explicit Types (Immediate Conversion)
-If you declare variables with explicit C++ types, the conversion happens immediately:
-
-```cpp
-string username = body["username"]; // Converts to string immediately
-int age          = body["age"];      // Converts to int immediately
-```
+#### Why is this Type Layer beneficial?
+1. **Developer Friendliness**: Developers coming from Node.js (Express), Python (FastAPI), or Go don't need to memorize verbose C++ type casting methods like `.asString()` or `.asInt()`.
+2. **Safety**: Our type layer is resilient. If a JSON value is missing or null, it falls back to empty defaults (`""`, `0`, `false`) instead of crashing the server.
+3. **Flexibility**: C++ experts can still write standard, strict C++ by declaring explicit types, while beginners or rapid-prototypers can rely on `auto` and implicit casting.
 
 > [!NOTE]
 > The only time you must use explicit types (or casts) is when performing operations where the compiler cannot determine the target type automatically, such as concatenating strings directly:
@@ -69,7 +80,7 @@ int age          = body["age"];      // Converts to int immediately
 > auto val = body["name"] + " suffix"; 
 > 
 > //  Correct:
-> string val = body["name"];
+> std::string val = body["name"];
 > val += " suffix";
 > ```
 

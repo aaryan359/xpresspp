@@ -11,8 +11,9 @@
 #include <mutex>
 #include <condition_variable>
 #include <iostream>
+#include <sstream>
 
-namespace xp::test {
+namespace xp {
 
 class TestRequestBuilder {
 private:
@@ -56,29 +57,6 @@ public:
         native_req_->setMethod(m);
     }
 
-    TestRequestBuilder& send(const std::string& body, const std::string& contentType = "application/json") {
-        native_req_->setBody(body);
-        native_req_->addHeader("content-type", contentType);
-        if (contentType == "application/json") {
-            native_req_->setContentTypeCode(drogon::CT_APPLICATION_JSON);
-        } else if (contentType == "text/plain") {
-            native_req_->setContentTypeCode(drogon::CT_TEXT_PLAIN);
-        } else if (contentType == "text/html") {
-            native_req_->setContentTypeCode(drogon::CT_TEXT_HTML);
-        }
-        return *this;
-    }
-
-    TestRequestBuilder& send(const char* body, const std::string& contentType = "application/json") {
-        return send(std::string(body), contentType);
-    }
-
-    TestRequestBuilder& send(const Json::Value& jsonBody) {
-        Json::StreamWriterBuilder builder;
-        std::string body = Json::writeString(builder, jsonBody);
-        return send(body, "application/json");
-    }
-
     TestRequestBuilder& set(const std::string& key, const std::string& value) {
         native_req_->addHeader(key, value);
         return *this;
@@ -94,21 +72,48 @@ public:
         return *this;
     }
 
-    void end(std::function<void(const Response&)> cb = nullptr) {
+    Response send(const std::string& body = "", const std::string& contentType = "application/json") {
+        std::cout << "[TestClient DEBUG] Entering send(string). body size = " << body.size() << std::endl;
+        try {
+            if (!body.empty()) {
+                native_req_->setBody(body);
+                native_req_->addHeader("content-type", contentType);
+                if (contentType == "application/json") {
+                    native_req_->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+                } else if (contentType == "text/plain") {
+                    native_req_->setContentTypeCode(drogon::CT_TEXT_PLAIN);
+                } else if (contentType == "text/html") {
+                    native_req_->setContentTypeCode(drogon::CT_TEXT_HTML);
+                }
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "[TestClient DEBUG] Error preparing request: " << e.what() << std::endl;
+            throw;
+        }
+
         std::mutex mtx;
         std::condition_variable cv;
         bool done = false;
         drogon::HttpResponsePtr response_ptr;
 
-        app_.injectRequest(native_req_, [&](const drogon::HttpResponsePtr& res) {
-            response_ptr = res;
-            std::lock_guard<std::mutex> lock(mtx);
-            done = true;
-            cv.notify_one();
-        });
+        std::cout << "[TestClient DEBUG] Injecting request..." << std::endl;
+        try {
+            app_.injectRequest(native_req_, [&](const drogon::HttpResponsePtr& res) {
+                std::cout << "[TestClient DEBUG] Callback received response!" << std::endl;
+                response_ptr = res;
+                std::lock_guard<std::mutex> lock(mtx);
+                done = true;
+                cv.notify_one();
+            });
+        } catch (const std::exception& e) {
+            std::cerr << "[TestClient DEBUG] Error during injectRequest call: " << e.what() << std::endl;
+            throw;
+        }
 
+        std::cout << "[TestClient DEBUG] Waiting for condition variable..." << std::endl;
         std::unique_lock<std::mutex> lock(mtx);
         cv.wait(lock, [&] { return done; });
+        std::cout << "[TestClient DEBUG] Wait finished. Constructing Response..." << std::endl;
 
         Response res(response_ptr);
 
@@ -129,9 +134,22 @@ public:
             assert(actual == value);
         }
 
-        if (cb) {
-            cb(res);
+        std::cout << "[TestClient DEBUG] Exiting send(string) successfully." << std::endl;
+        return res;
+    }
+
+    Response send(const xp::var& jsonBody) {
+        std::cout << "[TestClient DEBUG] Entering send(var)" << std::endl;
+        Json::StreamWriterBuilder builder;
+        std::string body;
+        try {
+            body = Json::writeString(builder, jsonBody);
+        } catch (const std::exception& e) {
+            std::cerr << "[TestClient DEBUG] Json::writeString failed: " << e.what() << std::endl;
+            throw;
         }
+        std::cout << "[TestClient DEBUG] Serialized body: " << body << std::endl;
+        return send(body, "application/json");
     }
 };
 
@@ -153,4 +171,4 @@ inline TestClient request(App& app) {
     return TestClient(app);
 }
 
-} // namespace xp::test
+} // namespace xp

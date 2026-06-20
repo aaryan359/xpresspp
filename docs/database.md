@@ -87,7 +87,7 @@ app.post("/users", [](xp::Request& req, xp::Response& res) async {
         // Read JSON body directly
         auto body = req.json();
         
-        await prisma.user.create(body);
+        co_await prisma.user.create(body);
         res.created({{"success", true}});
     } catch (const std::exception& e) {
         res.serverError(e.what());
@@ -107,7 +107,7 @@ app.get("/users/:id", [](xp::Request& req, xp::Response& res) async {
             }}
         };
         
-        auto user = await prisma.user.findUnique(query);
+        auto user = co_await prisma.user.findUnique(query);
         if (!user.isNull()) {
             res.ok(user);
         } else {
@@ -138,7 +138,7 @@ app.get("/users", [](xp::Request& req, xp::Response& res) async {
             }}
         };
         
-        auto users = await prisma.user.findMany(query);
+        auto users = co_await prisma.user.findMany(query);
         res.ok(users);
     } catch (const std::exception& e) {
         res.serverError(e.what());
@@ -157,7 +157,7 @@ app.patch("/users/:id", [](xp::Request& req, xp::Response& res) async {
             {"data", xp::obj{{"username", req.json()["username"]}}}
         };
         
-        await prisma.user.update(updateQuery);
+        co_await prisma.user.update(updateQuery);
         res.ok({{"success", true}});
     } catch (const std::exception& e) {
         res.serverError(e.what());
@@ -175,7 +175,7 @@ app.del("/users", [](xp::Request& req, xp::Response& res) async {
             }}
         };
         
-        await prisma.user.deleteMany(deleteQuery);
+        co_await prisma.user.deleteMany(deleteQuery);
         res.ok({{"success", true}});
     } catch (const std::exception& e) {
         res.serverError(e.what());
@@ -210,4 +210,96 @@ int main() {
     app.listen();
     return 0;
 }
+```
+
+---
+
+## 5. ORM Relations & Associations
+
+Xpress++ supports declaring associations (like **One-to-Many**, **Many-to-One**) inside your `schema.xp` file, which maps natively to foreign keys in relational databases. You can eager-load associated relations dynamically using query-time inclusions.
+
+### 1. Declaring Relations in `schema.xp`
+
+Use the standard Prisma `@relation` directive and fields array syntax to define associations:
+
+```prisma
+model User {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  posts     Post[]   // One-to-Many association (virtual)
+}
+
+model Post {
+  id        Int      @id @default(autoincrement())
+  title     String
+  authorId  Int      // Foreign key
+  author    User     @relation(fields: [authorId], references: [id]) // Many-to-One association
+}
+```
+
+### 2. Eager-Loading Nested Records
+
+At query-time, you can pass an `include` object specifying which relations you want to eager-load. The generated ORM client will handle nested database queries automatically under the hood.
+
+#### Eager Loading One-to-Many (`posts` on `User`)
+```cpp
+app.get("/users", [](xp::Request& req, xp::Response& res) async {
+    try {
+        xp::obj query = {
+            {"include", xp::obj{
+                {"posts", true} // Eager-load Alice's posts
+            }}
+        };
+        
+        auto users = co_await prisma.user.findMany(query);
+        res.ok(users);
+        /*
+          Response JSON will be structured as:
+          [
+            {
+              "id": 1,
+              "username": "alice",
+              "posts": [
+                { "id": 101, "title": "First Post", "authorId": 1 },
+                { "id": 102, "title": "Second Post", "authorId": 1 }
+              ]
+            }
+          ]
+        */
+    } catch (const std::exception& e) {
+        res.serverError(e.what());
+    }
+});
+```
+
+#### Eager Loading Many-to-One (`author` on `Post`)
+```cpp
+app.get("/posts", [](xp::Request& req, xp::Response& res) async {
+    try {
+        xp::obj query = {
+            {"include", xp::obj{
+                {"author", true} // Eager-load the author user object
+            }}
+        };
+        
+        auto posts = co_await prisma.post.findMany(query);
+        res.ok(posts);
+        /*
+          Response JSON will be structured as:
+          [
+            {
+              "id": 101,
+              "title": "First Post",
+              "authorId": 1,
+              "author": {
+                "id": 1,
+                "username": "alice"
+              }
+            }
+          ]
+        */
+    } catch (const std::exception& e) {
+        res.serverError(e.what());
+    }
+});
 ```

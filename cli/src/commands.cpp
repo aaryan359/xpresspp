@@ -825,6 +825,10 @@ struct FieldInfo {
     bool isUnique = false;
     bool isDefaultNow = false;
     bool isRelation = false;
+    bool isList = false;
+    std::string relationModel;
+    std::string relationFields;
+    std::string relationReferences;
 };
 
 struct ModelInfo {
@@ -947,6 +951,37 @@ int migrate() {
                 f.type = typeToken;
 
                 f.isRelation = !isPrimitiveType(typeToken);
+                if (f.isRelation) {
+                    if (f.type.size() > 2 && f.type.substr(f.type.size() - 2) == "[]") {
+                        f.isList = true;
+                        f.relationModel = f.type.substr(0, f.type.size() - 2);
+                    } else {
+                        f.isList = false;
+                        f.relationModel = f.type;
+                    }
+
+                    auto relPos = line.find("@relation(");
+                    if (relPos != std::string::npos) {
+                        auto endPos = line.find(")", relPos);
+                        if (endPos != std::string::npos) {
+                            std::string relContent = line.substr(relPos + 10, endPos - relPos - 10);
+                            auto fieldsPos = relContent.find("fields: [");
+                            if (fieldsPos != std::string::npos) {
+                                auto fieldsEnd = relContent.find("]", fieldsPos);
+                                if (fieldsEnd != std::string::npos) {
+                                    f.relationFields = relContent.substr(fieldsPos + 9, fieldsEnd - fieldsPos - 9);
+                                }
+                            }
+                            auto refPos = relContent.find("references: [");
+                            if (refPos != std::string::npos) {
+                                auto refEnd = relContent.find("]", refPos);
+                                if (refEnd != std::string::npos) {
+                                    f.relationReferences = relContent.substr(refPos + 13, refEnd - refPos - 13);
+                                }
+                            }
+                        }
+                    }
+                }
 
                 for (size_t i = 2; i < tokens.size(); ++i) {
                     std::string dec = tokens[i];
@@ -965,6 +1000,27 @@ int migrate() {
                 }
 
                 currentModel.fields.push_back(f);
+            }
+        }
+    }
+
+    // Pre-resolve inverse relation fields
+    for (auto& model : models) {
+        for (auto& f : model.fields) {
+            if (!f.isRelation) continue;
+            if (f.relationFields.empty()) {
+                for (const auto& targetModel : models) {
+                    if (targetModel.name == f.relationModel) {
+                        for (const auto& tf : targetModel.fields) {
+                            if (tf.isRelation && tf.relationModel == model.name && !tf.relationFields.empty()) {
+                                f.relationFields = tf.relationReferences;
+                                f.relationReferences = tf.relationFields;
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                }
             }
         }
     }
@@ -1117,16 +1173,92 @@ int migrate() {
             dbOut << "    }\n\n";
         }
 
-        dbOut << "    drogon::Task<Json::Value> findUnique(const Json::Value& where) const {\n";
-        dbOut << "        co_return co_await ::" << model.name << "::findUnique(where);\n";
+        dbOut << "    drogon::Task<Json::Value> findUnique(const Json::Value& query) const {\n";
+        dbOut << "        Json::Value where = query;\n";
+        dbOut << "        Json::Value include;\n";
+        dbOut << "        if (query.isObject()) {\n";
+        dbOut << "            if (query.isMember(\"where\")) {\n";
+        dbOut << "                where = query[\"where\"];\n";
+        dbOut << "            } else if (query.isMember(\"include\")) {\n";
+        dbOut << "                where = query;\n";
+        dbOut << "                where.removeMember(\"include\");\n";
+        dbOut << "            }\n";
+        dbOut << "            if (query.isMember(\"include\")) {\n";
+        dbOut << "                include = query[\"include\"];\n";
+        dbOut << "            }\n";
+        dbOut << "        }\n";
+        dbOut << "        Json::Value result = co_await ::" << model.name << "::findUnique(where);\n";
+        dbOut << "        if (result.isNull() || include.isNull() || !include.isObject()) {\n";
+        dbOut << "            co_return result;\n";
+        dbOut << "        }\n";
+        for (const auto& f : model.fields) {
+            if (!f.isRelation) continue;
+            dbOut << "        if (include.isMember(\"" << f.name << "\") && include[\"" << f.name << "\"].asBool()) {\n";
+            dbOut << "            if (result.isMember(\"" << f.relationFields << "\") && !result[\"" << f.relationFields << "\"].isNull()) {\n";
+            dbOut << "                Json::Value subWhere;\n";
+            dbOut << "                subWhere[\"" << f.relationReferences << "\"] = result[\"" << f.relationFields << "\"];\n";
+            if (f.isList) {
+                dbOut << "                result[\"" << f.name << "\"] = co_await ::" << f.relationModel << "::findMany(subWhere);\n";
+            } else {
+                dbOut << "                result[\"" << f.name << "\"] = co_await ::" << f.relationModel << "::findUnique(subWhere);\n";
+            }
+            dbOut << "            } else {\n";
+            if (f.isList) {
+                dbOut << "                result[\"" << f.name << "\"] = Json::Value(Json::arrayValue);\n";
+            } else {
+                dbOut << "                result[\"" << f.name << "\"] = Json::Value(Json::nullValue);\n";
+            }
+            dbOut << "            }\n";
+            dbOut << "        }\n";
+        }
+        dbOut << "        co_return result;\n";
         dbOut << "    }\n\n";
 
-        dbOut << "    drogon::Task<Json::Value> findMany(const Json::Value& where = Json::Value()) const {\n";
-        dbOut << "        co_return co_await ::" << model.name << "::findMany(where);\n";
+        dbOut << "    drogon::Task<Json::Value> findMany(const Json::Value& query = Json::Value()) const {\n";
+        dbOut << "        Json::Value where = query;\n";
+        dbOut << "        Json::Value include;\n";
+        dbOut << "        if (query.isObject()) {\n";
+        dbOut << "            if (query.isMember(\"where\")) {\n";
+        dbOut << "                where = query[\"where\"];\n";
+        dbOut << "            } else if (query.isMember(\"include\")) {\n";
+        dbOut << "                where = query;\n";
+        dbOut << "                where.removeMember(\"include\");\n";
+        dbOut << "            }\n";
+        dbOut << "            if (query.isMember(\"include\")) {\n";
+        dbOut << "                include = query[\"include\"];\n";
+        dbOut << "            }\n";
+        dbOut << "        }\n";
+        dbOut << "        Json::Value results = co_await ::" << model.name << "::findMany(where);\n";
+        dbOut << "        if (results.isNull() || !results.isArray() || results.empty() || include.isNull() || !include.isObject()) {\n";
+        dbOut << "            co_return results;\n";
+        dbOut << "        }\n";
+        dbOut << "        for (auto& result : results) {\n";
+        for (const auto& f : model.fields) {
+            if (!f.isRelation) continue;
+            dbOut << "            if (include.isMember(\"" << f.name << "\") && include[\"" << f.name << "\"].asBool()) {\n";
+            dbOut << "                if (result.isMember(\"" << f.relationFields << "\") && !result[\"" << f.relationFields << "\"].isNull()) {\n";
+            dbOut << "                    Json::Value subWhere;\n";
+            dbOut << "                    subWhere[\"" << f.relationReferences << "\"] = result[\"" << f.relationFields << "\"];\n";
+            if (f.isList) {
+                dbOut << "                    result[\"" << f.name << "\"] = co_await ::" << f.relationModel << "::findMany(subWhere);\n";
+            } else {
+                dbOut << "                    result[\"" << f.name << "\"] = co_await ::" << f.relationModel << "::findUnique(subWhere);\n";
+            }
+            dbOut << "                } else {\n";
+            if (f.isList) {
+                dbOut << "                    result[\"" << f.name << "\"] = Json::Value(Json::arrayValue);\n";
+            } else {
+                dbOut << "                    result[\"" << f.name << "\"] = Json::Value(Json::nullValue);\n";
+            }
+            dbOut << "                }\n";
+            dbOut << "            }\n";
+        }
+        dbOut << "        }\n";
+        dbOut << "        co_return results;\n";
         dbOut << "    }\n\n";
 
-        dbOut << "    drogon::Task<Json::Value> findFirst(const Json::Value& where) const {\n";
-        dbOut << "        co_return co_await ::" << model.name << "::findUnique(where);\n";
+        dbOut << "    drogon::Task<Json::Value> findFirst(const Json::Value& query) const {\n";
+        dbOut << "        co_return co_await findUnique(query);\n";
         dbOut << "    }\n\n";
 
         dbOut << "    drogon::Task<void> update(const Json::Value& where, const Json::Value& data) const {\n";
@@ -1186,6 +1318,111 @@ int migrate() {
     }
     divider();
     success("Migration structures generated successfully! You can now use 'prisma' in your controllers and SchemaSync::syncAll() in your DB configuration.");
+    return 0;
+}
+
+static std::string detectProjectName() {
+    std::ifstream f("CMakeLists.txt");
+    if (!f) return "app";
+    std::string line;
+    while (std::getline(f, line)) {
+        auto pos = line.find("project(");
+        if (pos != std::string::npos) {
+            auto end = line.find(")", pos);
+            if (end != std::string::npos) {
+                std::string content = line.substr(pos + 8, end - pos - 8);
+                std::stringstream ss(content);
+                std::string name;
+                if (ss >> name) {
+                    return name;
+                }
+            }
+        }
+    }
+    return "app";
+}
+
+int dockerize() {
+    std::string reason;
+    if (!isXpressProject(&reason)) {
+        error("Not an Xpress++ project.", reason, "Run this command from your project root directory.");
+        return 1;
+    }
+
+    std::string name = detectProjectName();
+    info("Configuring Docker build for project: " + name);
+
+    std::ofstream df("Dockerfile");
+    if (!df) {
+        error("Failed to create Dockerfile.", "Check write permissions in the current directory.");
+        return 1;
+    }
+
+    df << "# Multi-stage Docker build for " << name << "\n"
+       << "# -----------------------------------------------------\n"
+       << "# Stage 1: Build stage\n"
+       << "FROM ubuntu:22.04 AS builder\n\n"
+       << "ENV DEBIAN_FRONTEND=noninteractive\n"
+       << "RUN apt-get update && apt-get install -y \\\n"
+       << "    build-essential \\\n"
+       << "    cmake \\\n"
+       << "    git \\\n"
+       << "    libssl-dev \\\n"
+       << "    libjsoncpp-dev \\\n"
+       << "    uuid-dev \\\n"
+       << "    zlib1g-dev \\\n"
+       << "    libsqlite3-dev \\\n"
+       << "    libpq-dev \\\n"
+       << "    && rm -rf /var/lib/apt/lists/*\n\n"
+       << "WORKDIR /app\n"
+       << "COPY . .\n\n"
+       << "RUN mkdir -p build && cd build \\\n"
+       << "    && cmake -DCMAKE_BUILD_TYPE=Release .. \\\n"
+       << "    && make -j$(nproc)\n\n"
+       << "# -----------------------------------------------------\n"
+       << "# Stage 2: Runtime stage\n"
+       << "FROM ubuntu:22.04\n\n"
+       << "ENV DEBIAN_FRONTEND=noninteractive\n"
+       << "RUN apt-get update && apt-get install -y \\\n"
+       << "    libssl3 \\\n"
+       << "    libjsoncpp25 \\\n"
+       << "    uuid-dev \\\n"
+       << "    zlib1g \\\n"
+       << "    libsqlite3-0 \\\n"
+       << "    libpq5 \\\n"
+       << "    && rm -rf /var/lib/apt/lists/*\n\n"
+       << "WORKDIR /app\n\n"
+       << "# Copy binary and default files\n"
+       << "COPY --from=builder /app/build/" << name << " .\n"
+       << "COPY --from=builder /app/config.json ./config.json 2>/dev/null || true\n"
+       << "COPY --from=builder /app/.env.example ./.env.example 2>/dev/null || true\n"
+       << "COPY --from=builder /app/uploads ./uploads 2>/dev/null || true\n\n"
+       << "EXPOSE 8080\n\n"
+       << "CMD [\"./" << name << "\"]\n";
+
+    df.close();
+
+    std::ofstream di(".dockerignore");
+    if (di) {
+        di << "build/\n"
+           << ".vscode/\n"
+           << "uploads/tmp/\n"
+           << ".env\n"
+           << "*.db\n"
+           << "*.log\n"
+           << ".git/\n"
+           << "Dockerfile\n"
+           << ".dockerignore\n";
+        di.close();
+    }
+
+    divider();
+    success("Created Dockerfile and .dockerignore for project " + name);
+    std::cout << "\n"
+              << "  You can build and run this container using:\n"
+              << "    " << colour::cyan() << "docker build -t " << name << " ." << colour::reset() << "\n"
+              << "    " << colour::cyan() << "docker run -p 8080:8080 --env-file .env " << name << colour::reset() << "\n\n";
+
     return 0;
 }
 

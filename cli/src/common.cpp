@@ -89,6 +89,7 @@ void usage() {
         << "    xp run     [--release]  Build and run the server\n"
         << "    xp migrate              Generate C++ models and synchronize database schema\n"
         << "    xp watch                Alias for xp dev\n"
+        << "    xp dockerize            Auto-generate optimized multi-stage Dockerfile\n"
         << "    xp clean                Delete the build directory\n"
         << "    xp install              Auto-install all dependencies (Drogon etc.)\n"
         << "    xp doctor               Check system dependencies\n"

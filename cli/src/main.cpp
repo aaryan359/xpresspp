@@ -36,6 +36,7 @@ int main(int argc, char** argv) {
     if (command == "build")   return xp::cli::build(release);
     if (command == "run")     return xp::cli::run(release);
     if (command == "migrate") return xp::cli::migrate();
+    if (command == "dockerize") return xp::cli::dockerize();
     if (command == "watch")   return xp::cli::watch();
     if (command == "dev")     return xp::cli::watch();
     if (command == "clean")   return xp::cli::clean();

@@ -13,10 +13,10 @@ Normally in C++, extracting values from a JSON object requires calling verbose m
 app.post("/users", [](xp::Request& req, xp::Response& res) {
     const auto body = req.json();
 
-    const std::string name = body["name"].asString();
-    const int age          = body["age"].asInt();
-    const bool admin       = body["admin"].asBool();
-    const double score     = body["score"].asDouble();
+    const string name = body["name"].asString();
+    const int age     = body["age"].asInt();
+    const bool admin  = body["admin"].asBool();
+    const double score = body["score"].asDouble();
 
     res.json({{"received", name}});
 });
@@ -29,10 +29,10 @@ app.post("/users", [](xp::Request& req, xp::Response& res) {
     auto body = req.json();
 
     // 2. Implicit conversion to core types! No .asString() / .asInt() needed.
-    std::string name = body["name"];
-    int age          = body["age"];
-    bool admin       = body["admin"];
-    double score     = body["score"];
+    string name  = body["name"];
+    int age      = body["age"];
+    bool admin   = body["admin"];
+    double score = body["score"];
 
     res.json({{"received", name}});
 });
@@ -40,7 +40,7 @@ app.post("/users", [](xp::Request& req, xp::Response& res) {
 
 ### Using `auto` vs. Explicit Types
 
-You can use either explicit types (`std::string`, `int`, etc.) or `auto`. Both are valid, but behave slightly differently:
+You can use either explicit types (`string`, `int`, etc.) or `auto`. Both are valid, but behave slightly differently:
 
 #### 1. Using `auto` (Deferred Conversion)
 If you declare variables using `auto`, the type is deduced as `xp::var`. The actual conversion will happen automatically later when you pass the variable to a function expecting a specific type:
@@ -58,8 +58,8 @@ someFunctionExpectingInt(age);
 If you declare variables with explicit C++ types, the conversion happens immediately:
 
 ```cpp
-std::string username = body["username"]; // Converts to std::string immediately
-int age              = body["age"];      // Converts to int immediately
+string username = body["username"]; // Converts to string immediately
+int age          = body["age"];      // Converts to int immediately
 ```
 
 > [!NOTE]
@@ -69,7 +69,7 @@ int age              = body["age"];      // Converts to int immediately
 > auto val = body["name"] + " suffix"; 
 > 
 > //  Correct:
-> std::string val = body["name"];
+> string val = body["name"];
 > val += " suffix";
 > ```
 
@@ -83,12 +83,12 @@ Because `xp::var` overrides `operator[]` to return another `xp::var` instance, c
 auto body = req.json();
 
 // Nested lookup converts implicitly
-std::string city = body["address"]["city"];
+string city = body["address"]["city"];
 
 // Iterate over arrays
 for (const auto& tag : body["tags"]) {
-    // tag is deduced as xp::var, converts implicitly to std::string
-    std::string tagName = tag;
+    // tag is deduced as xp::var, converts implicitly to string
+    string tagName = tag;
     std::cout << tagName << "\n";
 }
 

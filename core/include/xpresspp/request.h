@@ -147,9 +147,9 @@ public:
         }
     }
 
-    Json::Value json() const {
+    xp::var json() const {
         Json::CharReaderBuilder builder;
-        Json::Value root;
+        xp::var root;
         std::string errors;
         const std::string raw_body = body();
 
@@ -296,7 +296,7 @@ public:
 
     ValidationResult validate(std::initializer_list<std::pair<std::string, ValidationRule>> rules) const {
         ValidationResult result;
-        Json::Value body_val;
+        xp::var body_val;
         try {
             body_val = json();
         } catch (const std::exception& e) {

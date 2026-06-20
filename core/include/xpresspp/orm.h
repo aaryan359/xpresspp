@@ -119,7 +119,7 @@ public:
     }
     
     // FIND UNIQUE / FIND FIRST: Get record matching options
-    static drogon::Task<Json::Value> findUnique(const Json::Value& where) {
+    static drogon::Task<xp::var> findUnique(const Json::Value& where) {
         std::string tableName = Derived::tableName();
         auto client = xp::db();
         std::string driver = xp::currentDriver();
@@ -147,12 +147,12 @@ public:
     }
     
     // FIND ALL: Get all records in the table
-    static drogon::Task<Json::Value> findAll() {
+    static drogon::Task<xp::var> findAll() {
         co_return co_await findMany();
     }
 
     // FIND MANY: Get all records matching options
-    static drogon::Task<Json::Value> findMany(const Json::Value& where = Json::Value()) {
+    static drogon::Task<xp::var> findMany(const Json::Value& where = Json::Value()) {
         std::string tableName = Derived::tableName();
         auto client = xp::db();
         std::string driver = xp::currentDriver();
@@ -291,7 +291,7 @@ public:
         co_return;
     }
 
-    static drogon::Task<Json::Value> findUnique(const Json::Value& where) {
+    static drogon::Task<xp::var> findUnique(const Json::Value& where) {
         auto coll = getCollection();
         auto filter = jsonToBson(where);
         auto result = coll.find_one(filter.view());
@@ -301,11 +301,11 @@ public:
         co_return Json::Value();
     }
 
-    static drogon::Task<Json::Value> findAll() {
+    static drogon::Task<xp::var> findAll() {
         co_return co_await findMany();
     }
 
-    static drogon::Task<Json::Value> findMany(const Json::Value& where = Json::Value()) {
+    static drogon::Task<xp::var> findMany(const Json::Value& where = Json::Value()) {
         auto coll = getCollection();
         auto filter = (where.isNull() || !where.isObject()) ? 
             bsoncxx::document::value(bsoncxx::builder::basic::make_document()) : 
@@ -350,17 +350,17 @@ public:
         throw std::runtime_error("MongoDB driver is not installed on this system.");
         co_return;
     }
-    static drogon::Task<Json::Value> findUnique(const Json::Value&) {
+    static drogon::Task<xp::var> findUnique(const Json::Value&) {
         throw std::runtime_error("MongoDB driver is not installed on this system.");
-        co_return Json::Value();
+        co_return xp::var();
     }
-    static drogon::Task<Json::Value> findAll() {
+    static drogon::Task<xp::var> findAll() {
         throw std::runtime_error("MongoDB driver is not installed on this system.");
-        co_return Json::Value();
+        co_return xp::var();
     }
-    static drogon::Task<Json::Value> findMany(const Json::Value&) {
+    static drogon::Task<xp::var> findMany(const Json::Value&) {
         throw std::runtime_error("MongoDB driver is not installed on this system.");
-        co_return Json::Value();
+        co_return xp::var();
     }
     static drogon::Task<void> update(const Json::Value&, const Json::Value&) {
         throw std::runtime_error("MongoDB driver is not installed on this system.");
@@ -414,7 +414,7 @@ public:
         }
     }
 
-    drogon::Task<Json::Value> findUnique(const Json::Value& where) {
+    drogon::Task<xp::var> findUnique(const Json::Value& where) {
         if (xp::currentDriver() == "mongodb") {
 #if __has_include(<mongocxx/client.hpp>)
             auto coll = MongoClientManager::get().db()[name_];
@@ -453,7 +453,7 @@ public:
         }
     }
 
-    drogon::Task<Json::Value> findMany(const Json::Value& where = Json::Value()) {
+    drogon::Task<xp::var> findMany(const Json::Value& where = Json::Value()) {
         if (xp::currentDriver() == "mongodb") {
 #if __has_include(<mongocxx/client.hpp>)
             auto coll = MongoClientManager::get().db()[name_];

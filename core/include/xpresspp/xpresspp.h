@@ -1,6 +1,7 @@
 #pragma once
 
 #include "errors.h"
+#include "utils.h"
 #include "validation.h"
 #include "request.h"
 #include "response.h"
@@ -9,7 +10,6 @@
 #include "config.h"
 #include "env.h"
 #include "logger.h"
-#include "utils.h"
 #include "database.h"
 #include "orm.h"
 #include "test.h"

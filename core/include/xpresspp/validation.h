@@ -3,13 +3,13 @@
 #include <string>
 #include <vector>
 #include <functional>
-#include <json/json.h>
+#include "utils.h"
 
 namespace xp {
 
 class ValidationRule {
 public:
-    using CheckFunc = std::function<std::string(const std::string& field_name, const Json::Value& value)>;
+    using CheckFunc = std::function<std::string(const std::string& field_name, const xp::var& value)>;
 
 private:
     std::vector<CheckFunc> checks_;
@@ -30,7 +30,7 @@ public:
     const std::vector<CheckFunc>& checks() const { return checks_; }
 
     ValidationRule& min(int len, std::string custom_msg = "") {
-        checks_.push_back([len, msg = std::move(custom_msg)](const std::string& name, const Json::Value& val) -> std::string {
+        checks_.push_back([len, msg = std::move(custom_msg)](const std::string& name, const xp::var& val) -> std::string {
             if (!val.isString()) {
                 return "Field '" + name + "' must be a string";
             }
@@ -43,7 +43,7 @@ public:
     }
 
     ValidationRule& max(int len, std::string custom_msg = "") {
-        checks_.push_back([len, msg = std::move(custom_msg)](const std::string& name, const Json::Value& val) -> std::string {
+        checks_.push_back([len, msg = std::move(custom_msg)](const std::string& name, const xp::var& val) -> std::string {
             if (!val.isString()) {
                 return "Field '" + name + "' must be a string";
             }
@@ -56,7 +56,7 @@ public:
     }
 
     ValidationRule& email(std::string custom_msg = "") {
-        checks_.push_back([msg = std::move(custom_msg)](const std::string& name, const Json::Value& val) -> std::string {
+        checks_.push_back([msg = std::move(custom_msg)](const std::string& name, const xp::var& val) -> std::string {
             if (!val.isString()) {
                 return "Field '" + name + "' must be a string";
             }
@@ -69,8 +69,8 @@ public:
         return *this;
     }
 
-    ValidationRule& custom(std::function<bool(const Json::Value&)> predicate, std::string custom_msg) {
-        checks_.push_back([predicate, msg = std::move(custom_msg)](const std::string& name, const Json::Value& val) -> std::string {
+    ValidationRule& custom(std::function<bool(const xp::var&)> predicate, std::string custom_msg) {
+        checks_.push_back([predicate, msg = std::move(custom_msg)](const std::string& name, const xp::var& val) -> std::string {
             if (!predicate(val)) {
                 return msg;
             }
@@ -80,7 +80,7 @@ public:
     }
 
     ValidationRule& unique(std::string table, std::string col, std::string custom_msg = "") {
-        checks_.push_back([table, col, msg = std::move(custom_msg)](const std::string& name, const Json::Value& val) -> std::string {
+        checks_.push_back([table, col, msg = std::move(custom_msg)](const std::string& name, const xp::var& val) -> std::string {
             // DB checks can be registered here in the future
             return "";
         });
@@ -90,19 +90,19 @@ public:
 
 inline ValidationRule string() {
     ValidationRule r;
-    r.custom([](const Json::Value& val) { return val.isString(); }, "Must be a string");
+    r.custom([](const xp::var& val) { return val.isString(); }, "Must be a string");
     return r;
 }
 
 inline ValidationRule number() {
     ValidationRule r;
-    r.custom([](const Json::Value& val) { return val.isNumeric(); }, "Must be a number");
+    r.custom([](const xp::var& val) { return val.isNumeric(); }, "Must be a number");
     return r;
 }
 
 inline ValidationRule boolean() {
     ValidationRule r;
-    r.custom([](const Json::Value& val) { return val.isBool(); }, "Must be a boolean");
+    r.custom([](const xp::var& val) { return val.isBool(); }, "Must be a boolean");
     return r;
 }
 
@@ -114,8 +114,8 @@ struct ValidationError {
     std::string message;
 
     operator bool() const { return !message.empty(); }
-    operator Json::Value() const {
-        Json::Value val;
+    operator xp::var() const {
+        xp::var val;
         val["error"] = message;
         return val;
     }
@@ -125,7 +125,7 @@ struct ValidationError {
 };
 
 struct ValidationResult {
-    Json::Value body;
+    xp::var body;
     ValidationError error;
 };
 

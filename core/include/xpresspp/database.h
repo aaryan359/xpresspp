@@ -205,15 +205,15 @@ inline Json::Value resultToJson(const drogon::orm::Result& res) {
 }
 
 // Parameterized Query Json Helpers
-inline drogon::Task<Json::Value> queryJson(const std::string& sql, const std::vector<QueryParam>& params = {}) {
+inline drogon::Task<xp::var> queryJson(const std::string& sql, const std::vector<QueryParam>& params = {}) {
     auto result = co_await executeParameterized(db(), sql, params);
     co_return resultToJson(result);
 }
 
-inline drogon::Task<Json::Value> queryOneJson(const std::string& sql, const std::vector<QueryParam>& params = {}) {
+inline drogon::Task<xp::var> queryOneJson(const std::string& sql, const std::vector<QueryParam>& params = {}) {
     auto result = co_await executeParameterized(db(), sql, params);
     if (result.empty()) {
-        co_return Json::Value();
+        co_return xp::var();
     }
     co_return rowToJson(result, result[0]);
 }

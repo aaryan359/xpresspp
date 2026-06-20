@@ -100,7 +100,12 @@ int createApp(const std::string& name) {
 
     info("Creating project \"" + name + "\" ...");
     copyDirectory(template_dir, target);
-    copyDirectory(core_include, target / "vendor" / "xpresspp" / "include");
+
+    if (std::getenv("XPRESSPP_HOME") == nullptr) {
+        copyDirectory(core_include, target / "vendor" / "xpresspp" / "include");
+    } else {
+        info("XPRESSPP_HOME environment variable detected. Skipping vendor/ directory copy.");
+    }
 
     // Write CMakeLists.txt
     std::ofstream cmake(target / "CMakeLists.txt");
@@ -131,8 +136,11 @@ int createApp(const std::string& name) {
         << "    FetchContent_MakeAvailable(drogon)\n"
         << "endif()\n\n"
         << "add_executable(" << name << " main.cpp)\n"
-        << "target_include_directories(" << name
-        << " PRIVATE ${CMAKE_CURRENT_LIST_DIR}/vendor/xpresspp/include)\n"
+        << "if(DEFINED ENV{XPRESSPP_HOME})\n"
+        << "    target_include_directories(" << name << " PRIVATE $ENV{XPRESSPP_HOME}/core/include)\n"
+        << "else()\n"
+        << "    target_include_directories(" << name << " PRIVATE ${CMAKE_CURRENT_LIST_DIR}/vendor/xpresspp/include)\n"
+        << "endif()\n"
         << "target_link_libraries(" << name << " PRIVATE Drogon::Drogon)\n\n"
         << "if(TARGET jsoncpp_lib)\n"
         << "    target_link_libraries(" << name << " PRIVATE jsoncpp_lib)\n"
@@ -155,6 +163,35 @@ int createApp(const std::string& name) {
         << ".env\n"          // never commit secrets
         << "*.db\n"
         << "*.log\n";
+
+    // Write .vscode/c_cpp_properties.json to silence C++ IntelliSense squiggle errors
+    try {
+        fs::create_directories(target / ".vscode");
+        std::ofstream c_cpp_properties(target / ".vscode" / "c_cpp_properties.json");
+        if (c_cpp_properties) {
+            c_cpp_properties
+                << "{\n"
+                << "    \"configurations\": [\n"
+                << "        {\n"
+                << "            \"name\": \"Linux\",\n"
+                << "            \"includePath\": [\n"
+                << "                \"${workspaceFolder}/**\",\n"
+                << "                \"${env:XPRESSPP_HOME}/core/include\",\n"
+                << "                \"${workspaceFolder}/vendor/xpresspp/include\",\n"
+                << "                \"/usr/include/jsoncpp\"\n"
+                << "            ],\n"
+                << "            \"defines\": [],\n"
+                << "            \"compilerPath\": \"/usr/bin/gcc\",\n"
+                << "            \"cStandard\": \"c17\",\n"
+                << "            \"cppStandard\": \"gnu++20\",\n"
+                << "            \"intelliSenseMode\": \"linux-gcc-x64\",\n"
+                << "            \"compileCommands\": \"${workspaceFolder}/build/compile_commands.json\"\n"
+                << "        }\n"
+                << "    ],\n"
+                << "    \"version\": 4\n"
+                << "}\n";
+        }
+    } catch (...) {}
 
     divider();
     success(std::string("Created project  ") + colour::bold() + name + colour::reset());

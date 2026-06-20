@@ -566,6 +566,26 @@ public:
     }
 
     App& database(const std::string& db_url, std::size_t connection_number = 1, const std::string& name = "default") {
+        if (db_url.rfind("mongodb://", 0) == 0 || db_url.rfind("mongodb+srv://", 0) == 0) {
+#if __has_include(<mongocxx/client.hpp>)
+            std::string db_name = "default";
+            auto last_slash = db_url.rfind('/');
+            if (last_slash != std::string::npos && last_slash > 9) { // past mongodb://
+                auto db_part = db_url.substr(last_slash + 1);
+                auto question_mark = db_part.find('?');
+                if (question_mark != std::string::npos) {
+                    db_name = db_part.substr(0, question_mark);
+                } else {
+                    db_name = db_part;
+                }
+            }
+            MongoClientManager::get().connect(db_url, db_name);
+            currentDriver() = "mongodb";
+            return *this;
+#else
+            throw std::runtime_error("MongoDB support is not compiled. Please install the MongoDB C++ driver (mongocxx).");
+#endif
+        }
         DbConfig config = parseDbUrl(db_url);
         config.connection_number = connection_number;
         config.name = name;
@@ -580,7 +600,10 @@ public:
             driver = "postgresql";
         } else if (driver == "mysql") {
             driver = "mysql";
+        } else if (driver == "mongodb") {
+            driver = "mongodb";
         }
+        currentDriver() = driver;
 
         try {
             if (driver == "sqlite3") {
@@ -612,6 +635,25 @@ public:
                 config.name = db_config.name;
                 config.isFast = false;
                 drogon::app().addDbClient(config);
+            } else if (driver == "mongodb") {
+#if __has_include(<mongocxx/client.hpp>)
+                std::string url = "mongodb://";
+                if (!db_config.username.empty()) {
+                    url += db_config.username;
+                    if (!db_config.password.empty()) {
+                        url += ":" + db_config.password;
+                    }
+                    url += "@";
+                }
+                url += db_config.host;
+                if (db_config.port > 0) {
+                    url += ":" + std::to_string(db_config.port);
+                }
+                url += "/" + db_config.database;
+                MongoClientManager::get().connect(url, db_config.database);
+#else
+                throw std::runtime_error("MongoDB support is not compiled. Please install the MongoDB C++ driver (mongocxx).");
+#endif
             } else {
                 throw std::invalid_argument("Unsupported database driver: " + driver);
             }

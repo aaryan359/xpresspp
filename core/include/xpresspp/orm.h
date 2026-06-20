@@ -4,7 +4,17 @@
 #include <string>
 #include <vector>
 #include <iostream>
+#include <variant>
 #include "database.h"
+
+#if __has_include(<mongocxx/client.hpp>)
+#include <bsoncxx/json.hpp>
+#include <bsoncxx/builder/basic/document.hpp>
+#include <bsoncxx/builder/basic/kvp.hpp>
+#include <mongocxx/client.hpp>
+#include <mongocxx/database.hpp>
+#include <mongocxx/uri.hpp>
+#endif
 
 namespace xp {
 
@@ -49,31 +59,7 @@ struct SchemaField {
 
 using Schema = std::vector<SchemaField>;
 
-// Safe SQL value escaping utility for the query builder
-inline std::string escapeValue(const Json::Value& val) {
-    if (val.isNull()) {
-        return "NULL";
-    }
-    if (val.isBool()) {
-        return val.asBool() ? "TRUE" : "FALSE";
-    }
-    if (val.isNumeric()) {
-        return val.asString();
-    }
-    
-    std::string str = val.asString();
-    std::string escaped = "";
-    for (char c : str) {
-        if (c == '\'') {
-            escaped += "''";
-        } else {
-            escaped += c;
-        }
-    }
-    return "'" + escaped + "'";
-}
-
-// Model base class using CRTP (Curiously Recurring Template Pattern)
+// SQL Model base class using CRTP (Curiously Recurring Template Pattern)
 template <typename Derived>
 class Model {
 public:
@@ -103,41 +89,51 @@ public:
         sql += ");";
         
         std::cout << "[Xpress++ ORM] Syncing database table '" << tableName << "'..." << std::endl;
-        co_await xp::query(sql);
+        co_await xp::executeParameterized(sql, {});
     }
     
     // CREATE: Insert a new row in database
     static drogon::Task<void> create(const Json::Value& data) {
         std::string tableName = Derived::tableName();
+        auto client = xp::db();
+        std::string driver = xp::currentDriver();
+        
         std::string cols = "";
-        std::string vals = "";
+        std::string placeholders = "";
+        std::vector<QueryParam> params;
         
         int idx = 0;
         for (auto it = data.begin(); it != data.end(); ++it) {
             if (idx > 0) {
                 cols += ", ";
-                vals += ", ";
+                placeholders += ", ";
             }
             cols += it.name();
-            vals += escapeValue(*it);
+            placeholders += getPlaceholder(driver, idx + 1);
+            params.push_back(jsonToQueryParam(*it));
             idx++;
         }
         
-        std::string sql = "INSERT INTO " + tableName + " (" + cols + ") VALUES (" + vals + ");";
-        co_await xp::query(sql);
+        std::string sql = "INSERT INTO " + tableName + " (" + cols + ") VALUES (" + placeholders + ");";
+        co_await xp::executeParameterized(client, sql, params);
     }
     
     // FIND UNIQUE / FIND FIRST: Get record matching options
     static drogon::Task<Json::Value> findUnique(const Json::Value& where) {
         std::string tableName = Derived::tableName();
+        auto client = xp::db();
+        std::string driver = xp::currentDriver();
+        
         std::string conditions = "";
+        std::vector<QueryParam> params;
         
         int idx = 0;
         for (auto it = where.begin(); it != where.end(); ++it) {
             if (idx > 0) {
                 conditions += " AND ";
             }
-            conditions += it.name() + " = " + escapeValue(*it);
+            conditions += it.name() + " = " + getPlaceholder(driver, idx + 1);
+            params.push_back(jsonToQueryParam(*it));
             idx++;
         }
         
@@ -147,7 +143,7 @@ public:
         }
         sql += " LIMIT 1;";
         
-        co_return co_await xp::queryOneJson(sql);
+        co_return co_await xp::queryOneJson(sql, params);
     }
     
     // FIND ALL: Get all records in the table
@@ -158,7 +154,11 @@ public:
     // FIND MANY: Get all records matching options
     static drogon::Task<Json::Value> findMany(const Json::Value& where = Json::Value()) {
         std::string tableName = Derived::tableName();
+        auto client = xp::db();
+        std::string driver = xp::currentDriver();
+        
         std::string conditions = "";
+        std::vector<QueryParam> params;
         
         if (!where.isNull() && where.isObject()) {
             int idx = 0;
@@ -166,7 +166,8 @@ public:
                 if (idx > 0) {
                     conditions += " AND ";
                 }
-                conditions += it.name() + " = " + escapeValue(*it);
+                conditions += it.name() + " = " + getPlaceholder(driver, idx + 1);
+                params.push_back(jsonToQueryParam(*it));
                 idx++;
             }
         }
@@ -177,30 +178,37 @@ public:
         }
         sql += ";";
         
-        co_return co_await xp::queryJson(sql);
+        co_return co_await xp::queryJson(sql, params);
     }
     
     // UPDATE: Update records matching where with data
     static drogon::Task<void> update(const Json::Value& where, const Json::Value& data) {
         std::string tableName = Derived::tableName();
+        auto client = xp::db();
+        std::string driver = xp::currentDriver();
+        
         std::string sets = "";
         std::string conditions = "";
+        std::vector<QueryParam> params;
         
         int idx = 0;
         for (auto it = data.begin(); it != data.end(); ++it) {
             if (idx > 0) {
                 sets += ", ";
             }
-            sets += it.name() + " = " + escapeValue(*it);
+            sets += it.name() + " = " + getPlaceholder(driver, idx + 1);
+            params.push_back(jsonToQueryParam(*it));
             idx++;
         }
         
+        int paramOffset = idx;
         idx = 0;
         for (auto it = where.begin(); it != where.end(); ++it) {
             if (idx > 0) {
                 conditions += " AND ";
             }
-            conditions += it.name() + " = " + escapeValue(*it);
+            conditions += it.name() + " = " + getPlaceholder(driver, paramOffset + idx + 1);
+            params.push_back(jsonToQueryParam(*it));
             idx++;
         }
         
@@ -209,20 +217,25 @@ public:
             sql += " WHERE " + conditions;
         }
         sql += ";";
-        co_await xp::query(sql);
+        co_await xp::executeParameterized(client, sql, params);
     }
     
     // DELETE MANY: Remove records matching where
     static drogon::Task<void> deleteMany(const Json::Value& where) {
         std::string tableName = Derived::tableName();
+        auto client = xp::db();
+        std::string driver = xp::currentDriver();
+        
         std::string conditions = "";
+        std::vector<QueryParam> params;
         
         int idx = 0;
         for (auto it = where.begin(); it != where.end(); ++it) {
             if (idx > 0) {
                 conditions += " AND ";
             }
-            conditions += it.name() + " = " + escapeValue(*it);
+            conditions += it.name() + " = " + getPlaceholder(driver, idx + 1);
+            params.push_back(jsonToQueryParam(*it));
             idx++;
         }
         
@@ -231,8 +244,348 @@ public:
             sql += " WHERE " + conditions;
         }
         sql += ";";
-        co_await xp::query(sql);
+        co_await xp::executeParameterized(client, sql, params);
     }
 };
+
+// MongoDB Model base class using CRTP
+#if __has_include(<mongocxx/client.hpp>)
+inline bsoncxx::document::value jsonToBson(const Json::Value& json) {
+    Json::FastWriter writer;
+    std::string json_str = writer.write(json);
+    return bsoncxx::from_json(json_str);
+}
+
+inline Json::Value bsonToJson(const bsoncxx::document::view& bson) {
+    std::string json_str = bsoncxx::to_json(bson);
+    Json::CharReaderBuilder builder;
+    Json::Value val;
+    std::string errs;
+    std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
+    if (reader->parse(json_str.data(), json_str.data() + json_str.size(), &val, &errs)) {
+        return val;
+    }
+    return Json::Value();
+}
+
+template <typename Derived>
+class MongoModel {
+public:
+    static std::string collectionName() {
+        return Derived::tableName();
+    }
+
+    static mongocxx::collection getCollection() {
+        return MongoClientManager::get().db()[collectionName()];
+    }
+
+    static drogon::Task<void> sync() {
+        // No-op for MongoDB collection creation
+        co_return;
+    }
+
+    static drogon::Task<void> create(const Json::Value& data) {
+        auto coll = getCollection();
+        auto doc = jsonToBson(data);
+        coll.insert_one(doc.view());
+        co_return;
+    }
+
+    static drogon::Task<Json::Value> findUnique(const Json::Value& where) {
+        auto coll = getCollection();
+        auto filter = jsonToBson(where);
+        auto result = coll.find_one(filter.view());
+        if (result) {
+            co_return bsonToJson(result->view());
+        }
+        co_return Json::Value();
+    }
+
+    static drogon::Task<Json::Value> findAll() {
+        co_return co_await findMany();
+    }
+
+    static drogon::Task<Json::Value> findMany(const Json::Value& where = Json::Value()) {
+        auto coll = getCollection();
+        auto filter = (where.isNull() || !where.isObject()) ? 
+            bsoncxx::document::value(bsoncxx::builder::basic::make_document()) : 
+            jsonToBson(where);
+        
+        auto cursor = coll.find(filter.view());
+        Json::Value arr(Json::arrayValue);
+        for (auto&& doc : cursor) {
+            arr.append(bsonToJson(doc));
+        }
+        co_return arr;
+    }
+
+    static drogon::Task<void> update(const Json::Value& where, const Json::Value& data) {
+        auto coll = getCollection();
+        auto filter = jsonToBson(where);
+        
+        Json::Value setOp;
+        setOp["$set"] = data;
+        auto updateDoc = jsonToBson(setOp);
+        
+        coll.update_many(filter.view(), updateDoc.view());
+        co_return;
+    }
+
+    static drogon::Task<void> deleteMany(const Json::Value& where) {
+        auto coll = getCollection();
+        auto filter = jsonToBson(where);
+        coll.delete_many(filter.view());
+        co_return;
+    }
+};
+#else
+template <typename Derived>
+class MongoModel {
+public:
+    static drogon::Task<void> sync() {
+        throw std::runtime_error("MongoDB driver is not installed on this system.");
+        co_return;
+    }
+    static drogon::Task<void> create(const Json::Value&) {
+        throw std::runtime_error("MongoDB driver is not installed on this system.");
+        co_return;
+    }
+    static drogon::Task<Json::Value> findUnique(const Json::Value&) {
+        throw std::runtime_error("MongoDB driver is not installed on this system.");
+        co_return Json::Value();
+    }
+    static drogon::Task<Json::Value> findAll() {
+        throw std::runtime_error("MongoDB driver is not installed on this system.");
+        co_return Json::Value();
+    }
+    static drogon::Task<Json::Value> findMany(const Json::Value&) {
+        throw std::runtime_error("MongoDB driver is not installed on this system.");
+        co_return Json::Value();
+    }
+    static drogon::Task<void> update(const Json::Value&, const Json::Value&) {
+        throw std::runtime_error("MongoDB driver is not installed on this system.");
+        co_return;
+    }
+    static drogon::Task<void> deleteMany(const Json::Value&) {
+        throw std::runtime_error("MongoDB driver is not installed on this system.");
+        co_return;
+    }
+};
+#endif
+
+class Table {
+private:
+    std::string name_;
+
+public:
+    explicit Table(std::string name) : name_(std::move(name)) {}
+
+    drogon::Task<void> create(const Json::Value& data) {
+        if (xp::currentDriver() == "mongodb") {
+#if __has_include(<mongocxx/client.hpp>)
+            auto coll = MongoClientManager::get().db()[name_];
+            auto doc = jsonToBson(data);
+            coll.insert_one(doc.view());
+#else
+            throw std::runtime_error("MongoDB driver is not installed on this system.");
+#endif
+            co_return;
+        } else {
+            std::string driver = xp::currentDriver();
+            auto client = xp::db();
+            std::string cols = "";
+            std::string placeholders = "";
+            std::vector<QueryParam> params;
+            
+            int idx = 0;
+            for (auto it = data.begin(); it != data.end(); ++it) {
+                if (idx > 0) {
+                    cols += ", ";
+                    placeholders += ", ";
+                }
+                cols += it.name();
+                placeholders += getPlaceholder(driver, idx + 1);
+                params.push_back(jsonToQueryParam(*it));
+                idx++;
+            }
+            
+            std::string sql = "INSERT INTO " + name_ + " (" + cols + ") VALUES (" + placeholders + ");";
+            co_await xp::executeParameterized(client, sql, params);
+        }
+    }
+
+    drogon::Task<Json::Value> findUnique(const Json::Value& where) {
+        if (xp::currentDriver() == "mongodb") {
+#if __has_include(<mongocxx/client.hpp>)
+            auto coll = MongoClientManager::get().db()[name_];
+            auto filter = jsonToBson(where);
+            auto result = coll.find_one(filter.view());
+            if (result) {
+                co_return bsonToJson(result->view());
+            }
+#else
+            throw std::runtime_error("MongoDB driver is not installed on this system.");
+#endif
+            co_return Json::Value();
+        } else {
+            std::string driver = xp::currentDriver();
+            auto client = xp::db();
+            std::string conditions = "";
+            std::vector<QueryParam> params;
+            
+            int idx = 0;
+            for (auto it = where.begin(); it != where.end(); ++it) {
+                if (idx > 0) {
+                    conditions += " AND ";
+                }
+                conditions += it.name() + " = " + getPlaceholder(driver, idx + 1);
+                params.push_back(jsonToQueryParam(*it));
+                idx++;
+            }
+            
+            std::string sql = "SELECT * FROM " + name_;
+            if (!conditions.empty()) {
+                sql += " WHERE " + conditions;
+            }
+            sql += " LIMIT 1;";
+            
+            co_return co_await xp::queryOneJson(sql, params);
+        }
+    }
+
+    drogon::Task<Json::Value> findMany(const Json::Value& where = Json::Value()) {
+        if (xp::currentDriver() == "mongodb") {
+#if __has_include(<mongocxx/client.hpp>)
+            auto coll = MongoClientManager::get().db()[name_];
+            auto filter = (where.isNull() || !where.isObject()) ? 
+                bsoncxx::document::value(bsoncxx::builder::basic::make_document()) : 
+                jsonToBson(where);
+            auto cursor = coll.find(filter.view());
+            Json::Value arr(Json::arrayValue);
+            for (auto&& doc : cursor) {
+                arr.append(bsonToJson(doc));
+            }
+            co_return arr;
+#else
+            throw std::runtime_error("MongoDB driver is not installed on this system.");
+#endif
+            co_return Json::Value();
+        } else {
+            std::string driver = xp::currentDriver();
+            auto client = xp::db();
+            std::string conditions = "";
+            std::vector<QueryParam> params;
+            
+            if (!where.isNull() && where.isObject()) {
+                int idx = 0;
+                for (auto it = where.begin(); it != where.end(); ++it) {
+                    if (idx > 0) {
+                        conditions += " AND ";
+                    }
+                    conditions += it.name() + " = " + getPlaceholder(driver, idx + 1);
+                    params.push_back(jsonToQueryParam(*it));
+                    idx++;
+                }
+            }
+            
+            std::string sql = "SELECT * FROM " + name_;
+            if (!conditions.empty()) {
+                sql += " WHERE " + conditions;
+            }
+            sql += ";";
+            
+            co_return co_await xp::queryJson(sql, params);
+        }
+    }
+
+    drogon::Task<void> update(const Json::Value& where, const Json::Value& data) {
+        if (xp::currentDriver() == "mongodb") {
+#if __has_include(<mongocxx/client.hpp>)
+            auto coll = MongoClientManager::get().db()[name_];
+            auto filter = jsonToBson(where);
+            Json::Value setOp;
+            setOp["$set"] = data;
+            auto updateDoc = jsonToBson(setOp);
+            coll.update_many(filter.view(), updateDoc.view());
+#else
+            throw std::runtime_error("MongoDB driver is not installed on this system.");
+#endif
+            co_return;
+        } else {
+            std::string driver = xp::currentDriver();
+            auto client = xp::db();
+            std::string sets = "";
+            std::string conditions = "";
+            std::vector<QueryParam> params;
+            
+            int idx = 0;
+            for (auto it = data.begin(); it != data.end(); ++it) {
+                if (idx > 0) {
+                    sets += ", ";
+                }
+                sets += it.name() + " = " + getPlaceholder(driver, idx + 1);
+                params.push_back(jsonToQueryParam(*it));
+                idx++;
+            }
+            
+            int paramOffset = idx;
+            idx = 0;
+            for (auto it = where.begin(); it != where.end(); ++it) {
+                if (idx > 0) {
+                    conditions += " AND ";
+                }
+                conditions += it.name() + " = " + getPlaceholder(driver, paramOffset + idx + 1);
+                params.push_back(jsonToQueryParam(*it));
+                idx++;
+            }
+            
+            std::string sql = "UPDATE " + name_ + " SET " + sets;
+            if (!conditions.empty()) {
+                sql += " WHERE " + conditions;
+            }
+            sql += ";";
+            co_await xp::executeParameterized(client, sql, params);
+        }
+    }
+
+    drogon::Task<void> deleteMany(const Json::Value& where) {
+        if (xp::currentDriver() == "mongodb") {
+#if __has_include(<mongocxx/client.hpp>)
+            auto coll = MongoClientManager::get().db()[name_];
+            auto filter = jsonToBson(where);
+            coll.delete_many(filter.view());
+#else
+            throw std::runtime_error("MongoDB driver is not installed on this system.");
+#endif
+            co_return;
+        } else {
+            std::string driver = xp::currentDriver();
+            auto client = xp::db();
+            std::string conditions = "";
+            std::vector<QueryParam> params;
+            
+            int idx = 0;
+            for (auto it = where.begin(); it != where.end(); ++it) {
+                if (idx > 0) {
+                    conditions += " AND ";
+                }
+                conditions += it.name() + " = " + getPlaceholder(driver, idx + 1);
+                params.push_back(jsonToQueryParam(*it));
+                idx++;
+            }
+            
+            std::string sql = "DELETE FROM " + name_;
+            if (!conditions.empty()) {
+                sql += " WHERE " + conditions;
+            }
+            sql += ";";
+            co_await xp::executeParameterized(client, sql, params);
+        }
+    }
+};
+
+inline Table table(std::string name) {
+    return Table(std::move(name));
+}
 
 } // namespace xp

@@ -3,11 +3,21 @@
 #include <drogon/drogon.h>
 #include <json/json.h>
 #include <string>
+#include <vector>
+#include <variant>
+#include <type_traits>
+
+#if __has_include(<mongocxx/client.hpp>)
+#include <mongocxx/client.hpp>
+#include <mongocxx/instance.hpp>
+#include <mongocxx/uri.hpp>
+#include <memory>
+#endif
 
 namespace xp {
 
 struct DbConfig {
-    std::string driver = "sqlite3"; // "postgresql", "mysql", "sqlite3"
+    std::string driver = "sqlite3"; // "postgresql", "mysql", "sqlite3", "mongodb"
     std::string host = "127.0.0.1";
     int port = 0;
     std::string database;
@@ -17,18 +27,88 @@ struct DbConfig {
     std::string name = "default";
 };
 
+#if __has_include(<mongocxx/client.hpp>)
+class MongoClientManager {
+private:
+    std::unique_ptr<mongocxx::instance> instance_;
+    std::unique_ptr<mongocxx::client> client_;
+    std::string db_name_;
+
+    MongoClientManager() = default;
+
+public:
+    static MongoClientManager& get() {
+        static MongoClientManager manager;
+        return manager;
+    }
+
+    void connect(const std::string& uri_str, const std::string& db_name) {
+        if (!instance_) {
+            instance_ = std::make_unique<mongocxx::instance>();
+        }
+        client_ = std::make_unique<mongocxx::client>(mongocxx::uri(uri_str));
+        db_name_ = db_name;
+    }
+
+    mongocxx::database db() {
+        if (!client_) {
+            throw std::runtime_error("MongoDB client is not connected. Call database(\"mongodb://...\") first.");
+        }
+        return (*client_)[db_name_];
+    }
+};
+#endif
+
 inline drogon::orm::DbClientPtr db(const std::string& name = "default") {
     return drogon::app().getDbClient(name);
 }
 
-template <typename... Args>
-inline auto query(const std::string& sql, Args&&... args) {
-    return db()->execSqlCoro(sql, std::forward<Args>(args)...);
+inline std::string& currentDriver() {
+    static std::string driver = "sqlite3";
+    return driver;
 }
 
-template <typename... Args>
-inline auto queryClient(const std::string& clientName, const std::string& sql, Args&&... args) {
-    return db(clientName)->execSqlCoro(sql, std::forward<Args>(args)...);
+// Unified Query Parameter type for SQL databases
+using QueryParam = std::variant<std::nullptr_t, bool, int32_t, int64_t, double, std::string>;
+
+inline QueryParam jsonToQueryParam(const Json::Value& val) {
+    if (val.isNull()) return nullptr;
+    if (val.isBool()) return val.asBool();
+    if (val.isInt()) return static_cast<int64_t>(val.asInt());
+    if (val.isInt64()) return val.asInt64();
+    if (val.isUInt()) return static_cast<int64_t>(val.asUInt());
+    if (val.isUInt64()) return static_cast<int64_t>(val.asUInt64());
+    if (val.isDouble()) return val.asDouble();
+    return val.asString();
+}
+
+inline std::string getPlaceholder(const std::string& driver, int index) {
+    if (driver == "postgresql") {
+        return "$" + std::to_string(index);
+    }
+    return "?";
+}
+
+// Executes a parameterized SQL query asynchronously with parameter bindings
+inline drogon::Task<drogon::orm::Result> executeParameterized(
+    drogon::orm::DbClientPtr client, 
+    const std::string& sql, 
+    const std::vector<QueryParam>& params
+) {
+    auto binder = *client << sql;
+    for (const auto& param : params) {
+        std::visit([&binder](auto&& arg) {
+            binder << arg;
+        }, param);
+    }
+    co_return co_await drogon::orm::internal::SqlAwaiter(std::move(binder));
+}
+
+inline drogon::Task<drogon::orm::Result> executeParameterized(
+    const std::string& sql, 
+    const std::vector<QueryParam>& params
+) {
+    co_return co_await executeParameterized(db(), sql, params);
 }
 
 inline Json::Value parseFieldToValue(const std::string& str) {
@@ -124,15 +204,14 @@ inline Json::Value resultToJson(const drogon::orm::Result& res) {
     return arr;
 }
 
-template <typename... Args>
-inline drogon::Task<Json::Value> queryJson(const std::string& sql, Args&&... args) {
-    auto result = co_await query(sql, std::forward<Args>(args)...);
+// Parameterized Query Json Helpers
+inline drogon::Task<Json::Value> queryJson(const std::string& sql, const std::vector<QueryParam>& params = {}) {
+    auto result = co_await executeParameterized(db(), sql, params);
     co_return resultToJson(result);
 }
 
-template <typename... Args>
-inline drogon::Task<Json::Value> queryOneJson(const std::string& sql, Args&&... args) {
-    auto result = co_await query(sql, std::forward<Args>(args)...);
+inline drogon::Task<Json::Value> queryOneJson(const std::string& sql, const std::vector<QueryParam>& params = {}) {
+    auto result = co_await executeParameterized(db(), sql, params);
     if (result.empty()) {
         co_return Json::Value();
     }

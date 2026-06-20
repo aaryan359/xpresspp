@@ -6,10 +6,10 @@ Xpress++ leverages native C++20 coroutines to deliver maximum performance while 
 
 ## Why Use Async/Await?
 
-In traditional C++, network and database queries block the executing thread. To scale to thousands of concurrent requests, developers had to write verbose nested callbacks.
+In traditional C++, network and database queries block the executing thread. To scale to thousands of concurrent requests, developers had to write verbose nested callbacks or manage manually scheduled thread pools.
 
 With **Xpress++ Asynchronous Coroutines**:
-1. **Non-blocking execution**: When you `await` a database query or external API call, the worker thread is released to handle other incoming requests.
+1. **Non-blocking execution**: When you `await` a database query or external API call, the worker thread is released to handle other incoming HTTP requests.
 2. **Synchronous readability**: Your code reads sequentially from top to bottom, avoiding callback hell and complex promise chains.
 3. **No runtime overhead**: Native compiler-level coroutines compile down to state machines with zero call-stack overhead, running at near-bare-metal speed.
 
@@ -22,8 +22,8 @@ With **Xpress++ Asynchronous Coroutines**:
 // Verbose, boilerplate-heavy syntax
 app.get("/users", [](xp::Request& req, xp::Response& res) -> xp::Task<void> {
     try {
-        auto result = co_await xp::query("SELECT name FROM users;");
-        res.json(xp::resultToJson(result));
+        auto users = co_await prisma.user.findMany();
+        res.json(users);
     } catch (const std::exception& e) {
         res.status(500).json({{"error", e.what()}});
     }
@@ -36,8 +36,8 @@ app.get("/users", [](xp::Request& req, xp::Response& res) -> xp::Task<void> {
 // Clean, Express-like async/await syntax
 app.get("/users", [](xp::Request& req, xp::Response& res) async {
     try {
-        auto result = await xp::query("SELECT name FROM users;");
-        res.json(xp::resultToJson(result));
+        auto users = await prisma.user.findMany();
+        res.json(users);
     } catch (const std::exception& e) {
         res.status(500).json({{"error", e.what()}});
     }
@@ -63,12 +63,17 @@ app.get("/data", [](xp::Request& req, xp::Response& res) async {
 If you are writing a custom helper function that uses `async`, its return type must be wrapped in `xp::Task<T>` (or simply `xp::Task` if it doesn't return a value):
 ```cpp
 // A custom async helper function
-xp::Task<std::string> fetchUserEmail(int userId) async {
-    auto result = await xp::query("SELECT email FROM users WHERE id = $1 LIMIT 1;", userId);
-    if (result.empty()) {
+xp::Task<Json::Value> fetchUserEmail(int userId) async {
+    xp::obj query = {
+        {"where", xp::obj{
+            {"id", userId}
+        }}
+    };
+    auto user = await prisma.user.findUnique(query);
+    if (user.isNull()) {
         co_return "";
     }
-    co_return result[0]["email"].as<std::string>();
+    co_return user["email"];
 }
 ```
 
@@ -82,8 +87,13 @@ app.get("/check-user", [](xp::Request& req, xp::Response& res) async {
         co_return; // Exits the async coroutine safely
     }
 
-    auto result = await xp::query("SELECT id FROM users WHERE username = $1;", username);
-    res.json({{"exists", !result.empty()}});
+    xp::obj query = {
+        {"where", xp::obj{
+            {"username", username}
+        }}
+    };
+    auto user = await prisma.user.findUnique(query);
+    res.json({{"exists", !user.isNull()}});
 });
 ```
 
@@ -96,38 +106,41 @@ You can chain multiple `await` calls sequentially inside your handler:
 
 ```cpp
 app.get("/api/v1/profile", [](xp::Request& req, xp::Response& res) async {
-    auto userId = req.query("id");
+    auto userId = std::stoi(req.query("id"));
+
+    xp::obj userQuery = {
+        {"where", xp::obj{{"id", userId}}}
+    };
 
     // Fetch user details first
-    auto userResult = await xp::query("SELECT * FROM users WHERE id = $1;", userId);
-    if (userResult.empty()) {
+    auto user = await prisma.user.findUnique(userQuery);
+    if (user.isNull()) {
         res.status(404).json({{"error", "User not found"}});
         co_return;
     }
 
+    xp::obj logsQuery = {
+        {"where", xp::obj{{"user_id", userId}}}
+    };
     // Fetch logs using info from the user result
-    auto logsResult = await xp::query("SELECT * FROM audit_logs WHERE user_id = $1;", userId);
+    auto logs = await prisma.auditLog.findMany(logsQuery);
 
     res.json({
-        {"user", xp::rowToJson(userResult, userResult[0])},
-        {"logs", xp::resultToJson(logsResult)}
+        {"user", user},
+        {"logs", logs}
     });
 });
 ```
 
 ### 2. Startup Tasks (`app.onStart`)
-You can register async callbacks during application startup. This is perfect for setting up database schemas, seeds, or warming up caches:
+You can register async callbacks during application startup. This is perfect for setting up database schemas:
 
 ```cpp
 app.onStart([]() async {
     std::cout << "Starting database initialization..." << std::endl;
     
-    await xp::query(
-        "CREATE TABLE IF NOT EXISTS system_config ("
-        "key VARCHAR(50) PRIMARY KEY, "
-        "value VARCHAR(255) NOT NULL"
-        ");"
-    );
+    // Auto sync tables/collections with schema.xp
+    co_await SchemaSync::syncAll();
     
     std::cout << "System ready!" << std::endl;
 });

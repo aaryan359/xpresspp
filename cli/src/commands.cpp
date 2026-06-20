@@ -885,6 +885,7 @@ int migrate() {
         return 1;
     }
 
+    std::string dbProvider = "postgresql"; // default provider
     std::vector<ModelInfo> models;
     ModelInfo currentModel;
     bool inModel = false;
@@ -894,6 +895,14 @@ int migrate() {
         line = trimString(line);
         if (line.empty() || line.rfind("//", 0) == 0) {
             continue;
+        }
+
+        if (line.find("provider") != std::string::npos && line.find("=") != std::string::npos) {
+            auto firstQuote = line.find('"');
+            auto lastQuote = line.rfind('"');
+            if (firstQuote != std::string::npos && lastQuote != std::string::npos && firstQuote < lastQuote) {
+                dbProvider = line.substr(firstQuote + 1, lastQuote - firstQuote - 1);
+            }
         }
 
         if (line.rfind("model ", 0) == 0) {
@@ -960,10 +969,19 @@ int migrate() {
         }
     }
 
-    const fs::path modelsDir = fs::current_path() / "src" / "models";
+    fs::path modelsDir = fs::current_path() / "vendor" / "xpresspp" / "include" / "xpresspp";
+    bool useVendor = true;
+    if (!fs::exists(modelsDir)) {
+        modelsDir = fs::current_path() / "src" / "models";
+        useVendor = false;
+    }
     fs::create_directories(modelsDir);
 
-    info("Generating unified C++ DB client in src/models/db.h ...");
+    if (useVendor) {
+        info("Generating unified C++ DB client in vendor/xpresspp/include/xpresspp/db.h ...");
+    } else {
+        info("Generating unified C++ DB client in src/models/db.h ...");
+    }
 
     // Clean up old individual files if they exist to prevent clutter
     for (const auto& model : models) {
@@ -987,9 +1005,15 @@ int migrate() {
 
     // 1. Output C++ Model Classes
     for (const auto& model : models) {
-        dbOut << "class " << model.name << " : public xp::Model<" << model.name << "> {\n";
-        dbOut << "public:\n";
-        dbOut << "    using xp::Model<" << model.name << ">::create;\n\n";
+        if (dbProvider == "mongodb") {
+            dbOut << "class " << model.name << " : public xp::MongoModel<" << model.name << "> {\n";
+            dbOut << "public:\n";
+            dbOut << "    using xp::MongoModel<" << model.name << ">::create;\n\n";
+        } else {
+            dbOut << "class " << model.name << " : public xp::Model<" << model.name << "> {\n";
+            dbOut << "public:\n";
+            dbOut << "    using xp::Model<" << model.name << ">::create;\n\n";
+        }
         dbOut << "    static std::string tableName() { return \"" << model.tableName << "\"; }\n\n";
         dbOut << "    static xp::Schema schema() {\n";
         dbOut << "        return {\n";
@@ -1062,7 +1086,11 @@ int migrate() {
             dbOut << "        Json::Value data;\n";
             dbOut << "        data[\"username\"] = username;\n";
             dbOut << "        data[\"password\"] = password;\n";
-            dbOut << "        co_await xp::Model<" << model.name << ">::create(data);\n";
+            if (dbProvider == "mongodb") {
+                dbOut << "        co_await xp::MongoModel<" << model.name << ">::create(data);\n";
+            } else {
+                dbOut << "        co_await xp::Model<" << model.name << ">::create(data);\n";
+            }
             dbOut << "    }\n\n";
         }
 
@@ -1151,7 +1179,11 @@ int migrate() {
     dbOut << "    }\n";
     dbOut << "};\n";
 
-    success("Generated unified Prisma-like client in src/models/db.h");
+    if (useVendor) {
+        success("Generated unified Prisma-like client in vendor/xpresspp/include/xpresspp/db.h");
+    } else {
+        success("Generated unified Prisma-like client in src/models/db.h");
+    }
     divider();
     success("Migration structures generated successfully! You can now use 'prisma' in your controllers and SchemaSync::syncAll() in your DB configuration.");
     return 0;

@@ -1,155 +1,213 @@
-# Database Integration
+# Database Integration (Prisma-like ORM)
 
-Xpress++ provides a built-in Express-like wrapper around Drogon's non-blocking, asynchronous database engine. This allows you to connect to SQL databases (PostgreSQL, MySQL, SQLite3) and perform performant coroutine queries with simple `async` and `await` syntax.
+Xpress++ features a native database-agnostic ORM that supports **PostgreSQL** and **MongoDB** out of the box. Database clients are compiled dynamically from your schema definition, completely hidden from your source tree, and fully integrated with C++ coroutine syntax sugar.
 
 ---
 
-## Configuration (`xp::DbConfig`)
+## 1. Schema Definition (`schema.xp`)
 
-Configure your database connection using `xp::DbConfig` before calling `app.listen()`.
+Create a `schema.xp` file at the root of your project to define your datasource provider and data models.
 
-```cpp
-xp::App app;
+### PostgreSQL Configuration Example:
+```prisma
+datasource db {
+  provider = "postgresql"
+}
 
-xp::DbConfig db_config;
-db_config.driver = "postgresql";     // "sqlite3", "postgresql", or "mysql"
-db_config.host = "127.0.0.1";        // Database host
-db_config.port = 5450;               // Database port
-db_config.database = "my_app";       // Database name
-db_config.username = "postgres";     // Database user
-db_config.password = "password";     // Database password
-db_config.connection_number = 5;    // Connection pool size (default: 1)
-
-app.database(db_config);
+model User {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  password  String
+  createdAt DateTime @default(now())
+}
 ```
 
-### Configuration Parameters
+### MongoDB Configuration Example:
+```prisma
+datasource db {
+  provider = "mongodb"
+}
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `driver` | `string` | `"sqlite3"` | Connection driver (`postgresql`, `mysql`, `sqlite3`) |
-| `host` | `string` | `"127.0.0.1"` | IP address or hostname of the database server |
-| `port` | `int` | `0` (default) | Database port (`0` uses the default port for the selected driver) |
-| `database` | `string` | `""` | Name of the database to connect to (or file path for sqlite3) |
-| `username` | `string` | `""` | Database username |
-| `password` | `string` | `""` | Database password |
-| `connection_number` | `size_t` | `1` | Max number of concurrent connections in the connection pool |
-| `name` | `string` | `"default"` | Logical name of this database client instance |
+model Product {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  price     Double
+  active    Boolean  @default(true)
+}
+```
+
+### Supported Data Types & Attributes:
+
+| Prisma Type | C++ Map | DB Type (Postgres) | DB Type (MongoDB) |
+|-------------|---------|--------------------|-------------------|
+| `Int`       | `int`   | `INTEGER`          | `Int32`           |
+| `String`    | `string`| `VARCHAR(255)`     | `String`          |
+| `Boolean`   | `bool`  | `BOOLEAN`          | `Boolean`         |
+| `Double`    | `double`| `DOUBLE PRECISION` | `Double`          |
+| `DateTime`  | `string`| `TIMESTAMP`        | `Date`            |
+
+*   `@id`: Marks the primary key/unique identifier of the model.
+*   `@default(autoincrement())`: PostgreSQL serial column (only for `Int` primary keys).
+*   `@default(uuid())`: Generates a dynamic UUID for the primary key (ideal for MongoDB).
+*   `@default(now())`: Automatically populates the field with the current system timestamp.
+*   `@unique`: Enforces unique constraints at the database level.
 
 ---
 
-## Startup Initialization (`app.onStart`)
+## 2. Generate and Migrate the DB Client
 
-Often, you want to perform initialization tasks—such as verifying a connection, creating tables, or seeding mock data—when your application starts up. 
+To compile your schema definition and synchronize it with the database, run:
 
-Use `app.onStart()` to run any asynchronous setup code before the HTTP server begins listening:
+```bash
+xp migrate
+```
+
+### What this does:
+1. Parses `schema.xp` and validates syntax, field types, and attributes.
+2. Synchronizes database tables or collections matching the defined models.
+3. Generates the unified, type-safe C++ Prisma-like client dynamically under the framework's vendor directory:
+   ```
+   vendor/xpresspp/include/xpresspp/db.h
+   ```
+4. Exposes the global **`prisma`** client instance instantly in your application, requiring **zero import boilerplate**.
+
+---
+
+## 3. Querying the Database
+
+Xpress++ routes declared as `async` can run non-blocking database queries using the global `prisma` client.
+
+> [!IMPORTANT]
+> To avoid GCC 13 coroutine code generator compiler bugs, always declare the query as a local `xp::obj` variable before passing it to database methods.
+
+### 1. Creating a Record (`create`)
+```cpp
+app.post("/users", [](xp::Request& req, xp::Response& res) async {
+    try {
+        // Read JSON body directly
+        auto body = req.json();
+        
+        await prisma.user.create(body);
+        res.created({{"success", true}});
+    } catch (const std::exception& e) {
+        res.serverError(e.what());
+    }
+});
+```
+
+### 2. Finding a Record by Unique Identifier (`findUnique`)
+```cpp
+app.get("/users/:id", [](xp::Request& req, xp::Response& res) async {
+    try {
+        const auto id = std::stoi(req.param("id"));
+        
+        xp::obj query = {
+            {"where", xp::obj{
+                {"id", id}
+            }}
+        };
+        
+        auto user = await prisma.user.findUnique(query);
+        if (!user.isNull()) {
+            res.ok(user);
+        } else {
+            res.notFound("User not found");
+        }
+    } catch (const std::exception& e) {
+        res.serverError(e.what());
+    }
+});
+```
+
+### 3. Finding Many Records with Complex Filters (`findMany`)
+Xpress++ supports MongoDB and SQL parameterized query operators securely:
+*   `equals`, `not`
+*   `gt`, `gte`, `lt`, `lte`
+*   `contains`, `startsWith`, `endsWith`
+*   `in`, `notIn`
 
 ```cpp
-app.onStart([]() async {
+app.get("/users", [](xp::Request& req, xp::Response& res) async {
     try {
-        // Run migrations/DDL asynchronously on startup
-        await xp::query(
-            "CREATE TABLE IF NOT EXISTS users ("
-            "id SERIAL PRIMARY KEY, "
-            "username VARCHAR(50) UNIQUE NOT NULL, "
-            "password VARCHAR(100) NOT NULL"
-            ");"
-        );
-        std::cout << "[DB Setup] 'users' table initialized successfully." << std::endl;
+        xp::obj query = {
+            {"where", xp::obj{
+                {"age", xp::obj{
+                    {"gt", 18}
+                }},
+                {"status", "active"}
+            }}
+        };
+        
+        auto users = await prisma.user.findMany(query);
+        res.ok(users);
     } catch (const std::exception& e) {
-        std::cerr << "[DB Setup Failed] " << e.what() << std::endl;
+        res.serverError(e.what());
+    }
+});
+```
+
+### 4. Updating Records (`update`)
+```cpp
+app.patch("/users/:id", [](xp::Request& req, xp::Response& res) async {
+    try {
+        const auto id = std::stoi(req.param("id"));
+        
+        xp::obj updateQuery = {
+            {"where", xp::obj{{"id", id}}},
+            {"data", xp::obj{{"username", req.json()["username"]}}}
+        };
+        
+        await prisma.user.update(updateQuery);
+        res.ok({{"success", true}});
+    } catch (const std::exception& e) {
+        res.serverError(e.what());
+    }
+});
+```
+
+### 5. Deleting Records (`deleteMany`)
+```cpp
+app.del("/users", [](xp::Request& req, xp::Response& res) async {
+    try {
+        xp::obj deleteQuery = {
+            {"where", xp::obj{
+                {"status", "inactive"}
+            }}
+        };
+        
+        await prisma.user.deleteMany(deleteQuery);
+        res.ok({{"success", true}});
+    } catch (const std::exception& e) {
+        res.serverError(e.what());
     }
 });
 ```
 
 ---
 
-## Executing Asynchronous Queries (`await xp::query`)
+## 4. Startup Synchronization
 
-Xpress++ routes declared as `async` can run non-blocking SQL queries using `await xp::query()`. This lets the worker threads continue processing other HTTP requests while waiting for the database server to reply.
-
-### 1. Simple Select Queries
+To ensure that your database connections are checked and new tables/collections are created at server launch, include `SchemaSync::syncAll()` inside the application `onStart` block in `main.cpp`:
 
 ```cpp
-app.get("/users", [](xp::Request& req, xp::Response& res) async {
-    auto result = await xp::query("SELECT id, username FROM users;");
-    res.json(xp::resultToJson(result));
-});
-```
+int main() {
+    xp::loadEnv();
+    xp::App app;
+    
+    // Set database connection string (from environment variable or inline)
+    app.database("postgresql://postgres:postgres@localhost:5432/testdb");
+    
+    // Auto-migrate on startup
+    app.onStart([]() async {
+        try {
+            co_await SchemaSync::syncAll();
+            std::cout << "[DB] Schema sync completed successfully." << std::endl;
+        } catch (const std::exception& e) {
+            std::cerr << "[DB Error] Sync failed: " << e.what() << std::endl;
+        }
+    });
 
-### 2. Parameterized Queries (SQL Injection Prevention)
-
-Never concatenate strings to build SQL queries. Instead, pass values as arguments. Xpress++ automatically escapes placeholders (`$1`, `$2`, etc.) securely:
-
-```cpp
-app.post("/users", [](xp::Request& req, xp::Response& res) async {
-    auto body = req.json();
-    auto username = body["username"].asString();
-    auto password = body["password"].asString();
-
-    await xp::query(
-        "INSERT INTO users (username, password) VALUES ($1, $2);",
-        username, password
-    );
-
-    res.json({{"success", true}});
-});
-```
-
----
-
-## JSON Conversions
-
-To make exposing database records over JSON APIs painless, Xpress++ provides helpers to convert database rows or full results to `Json::Value` output.
-
-### `xp::resultToJson(result)`
-
-Converts a full SQL result set (array of rows) into a JSON array:
-
-```cpp
-auto result = await xp::query("SELECT * FROM users;");
-Json::Value json_array = xp::resultToJson(result);
-res.json(json_array);
-```
-
-### `xp::rowToJson(result, row)`
-
-Converts a single database row into a JSON object:
-
-```cpp
-auto result = await xp::query("SELECT * FROM users WHERE id = $1 LIMIT 1;", 42);
-if (!result.empty()) {
-    Json::Value json_user = xp::rowToJson(result, result[0]);
-    res.json(json_user);
-} else {
-    res.status(404).json({{"error", "User not found"}});
+    app.listen();
+    return 0;
 }
-```
-
----
-
-## Multiple Database Connections
-
-If your application needs to talk to more than one database, configure them with distinct names:
-
-```cpp
-// 1. Configure default postgres database
-xp::DbConfig pg_config;
-pg_config.driver = "postgresql";
-pg_config.database = "prod_db";
-app.database(pg_config);
-
-// 2. Configure secondary read-replica database
-xp::DbConfig replica_config;
-replica_config.driver = "postgresql";
-replica_config.database = "replica_db";
-replica_config.name = "replica";
-app.database(replica_config);
-```
-
-Then execute queries against specific database instances by specifying the database name:
-
-```cpp
-// Queries replica db
-auto result = await xp::queryClient("replica", "SELECT * FROM products;");
 ```

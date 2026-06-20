@@ -64,36 +64,22 @@ int main() {
     xp::App app;
 
     // Database Setup
-    xp::DbConfig db_config;
-    db_config.driver = "postgresql";
-    db_config.host = "127.0.0.1";
-    db_config.port = 5450;
-    db_config.database = "my_app";
-    app.database(db_config);
+    app.database("postgresql://postgres:postgres@localhost:5432/my_app");
 
-    // Initialize users table asynchronously on startup
+    // Initialize/sync database schema on startup
     app.onStart([]() async {
-        await xp::query(
-            "CREATE TABLE IF NOT EXISTS users ("
-            "id SERIAL PRIMARY KEY, "
-            "username VARCHAR(50) UNIQUE NOT NULL, "
-            "password VARCHAR(50) NOT NULL"
-            ");"
-        );
+        try {
+            co_await SchemaSync::syncAll();
+        } catch (const exception& e) {
+            cerr << "DB Sync failed: " << e.what() << endl;
+        }
     });
 
     // POST /api/auth/signup - Register a user
     app.post("/api/auth/signup", [](xp::Request& req, xp::Response& res) async {
         try {
             auto body = req.json();
-            auto username = body["username"].asString();
-            auto password = body["password"].asString();
-            
-            await xp::query(
-                "INSERT INTO users (username, password) VALUES ($1, $2);",
-                username, password
-            );
-            
+            await prisma.user.create(body);
             res.json({{"success", true}, {"message", "Registered successfully"}});
         } catch (...) {
             res.status(400).json({{"error", "Registration failed"}});
@@ -107,12 +93,14 @@ int main() {
             auto username = body["username"].asString();
             auto password = body["password"].asString();
             
-            auto result = await xp::query(
-                "SELECT password FROM users WHERE username = $1;",
-                username
-            );
+            xp::obj query = {
+                {"where", xp::obj{
+                    {"username", username}
+                }}
+            };
+            auto user = await prisma.user.findUnique(query);
             
-            if (result.empty() || result[0]["password"].as<string>() != password) {
+            if (user.isNull() || user["password"].asString() != password) {
                 res.status(401).json({{"error", "Invalid credentials"}});
                 co_return;
             }

@@ -87,6 +87,7 @@ export default defineConfig({
           { text: 'File uploads', link: '/file-uploads' },
           { text: 'JSON', link: '/json' },
           { text: 'Cookies', link: '/cookies' },
+          { text: 'WebSockets', link: '/websockets' },
         ]
       },
       {

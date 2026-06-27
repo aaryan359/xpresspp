@@ -82,6 +82,24 @@ Deletes the `./build` directory, forcing a clean rebuild on the next `xp build` 
 xp clean
 ```
 
+### `xp migrate`
+
+Parses `schema.xp`, generates SQL migration files under `migrations/`, and generates the dynamic C++ database client in `build/generated/db.h`.
+
+```bash
+xp migrate
+```
+
+---
+
+### `xp migrate rollback`
+
+Rolls back the last applied database migration by running your application's database rollback routines silently.
+
+```bash
+xp migrate rollback
+```
+
 ---
 
 ### `xp doctor`
@@ -156,4 +174,6 @@ When a build fails, the CLI analyses the compiler output and prints targeted hin
 | `xp run --release` | Build (release) and run |
 | `xp watch` | Auto-rebuild on source changes |
 | `xp clean` | Delete build cache |
+| `xp migrate` | Run migrations and generate client |
+| `xp migrate rollback` | Roll back the last migration |
 | `xp doctor` | Check dependencies |

@@ -496,6 +496,38 @@ public:
     }
 
     App() {
+        drogon::app().registerBeginningAdvice([]() {
+            bool is_rollback = false;
+            std::ifstream cmdline("/proc/self/cmdline");
+            if (cmdline.is_open()) {
+                std::string arg;
+                while (std::getline(cmdline, arg, '\0')) {
+                    if (arg == "--rollback" || arg == "-r") {
+                        is_rollback = true;
+                        break;
+                    }
+                }
+            }
+            if (const char* env = std::getenv("XP_ROLLBACK")) {
+                if (std::string(env) == "true" || std::string(env) == "1") {
+                    is_rollback = true;
+                }
+            }
+
+            if (is_rollback) {
+                auto do_rollback = []() -> drogon::AsyncTask {
+                    try {
+                        co_await xp::DatabaseManager::instance().rollbackLastMigration();
+                        std::exit(0);
+                    } catch (const std::exception& e) {
+                        std::cerr << "[Xpress++ Rollback Error] " << e.what() << std::endl;
+                        std::exit(1);
+                    }
+                };
+                do_rollback();
+            }
+        });
+
         notFound([](Request& req, Response& res) {
             res.status(404).json({
                 {"status",  "error"},
@@ -576,25 +608,9 @@ public:
     }
 
     App& database(const std::string& db_url, std::size_t connection_number = 1, const std::string& name = "default") {
+        xp::DatabaseManager::instance().connect(db_url);
         if (db_url.rfind("mongodb://", 0) == 0 || db_url.rfind("mongodb+srv://", 0) == 0) {
-#if __has_include(<mongocxx/client.hpp>)
-            std::string db_name = "default";
-            auto last_slash = db_url.rfind('/');
-            if (last_slash != std::string::npos && last_slash > 9) { // past mongodb://
-                auto db_part = db_url.substr(last_slash + 1);
-                auto question_mark = db_part.find('?');
-                if (question_mark != std::string::npos) {
-                    db_name = db_part.substr(0, question_mark);
-                } else {
-                    db_name = db_part;
-                }
-            }
-            MongoClientManager::get().connect(db_url, db_name);
-            currentDriver() = "mongodb";
             return *this;
-#else
-            throw std::runtime_error("MongoDB support is not compiled. Please install the MongoDB C++ driver (mongocxx).");
-#endif
         }
         DbConfig config = parseDbUrl(db_url);
         config.connection_number = connection_number;
@@ -603,6 +619,7 @@ public:
     }
 
     App& database(const DbConfig& db_config) {
+        xp::DatabaseManager::instance().connect(db_config);
         std::string driver = db_config.driver;
         if (driver == "sqlite" || driver == "sqlite3") {
             driver = "sqlite3";
@@ -613,7 +630,6 @@ public:
         } else if (driver == "mongodb") {
             driver = "mongodb";
         }
-        currentDriver() = driver;
 
         try {
             if (driver == "sqlite3") {
@@ -833,11 +849,36 @@ public:
 
     std::vector<RouteInfo> routes() const { return router_.routes(); }
 
+    bool isRollbackRequested() const {
+        bool is_rollback = false;
+        std::ifstream cmdline("/proc/self/cmdline");
+        if (cmdline.is_open()) {
+            std::string arg;
+            while (std::getline(cmdline, arg, '\0')) {
+                if (arg == "--rollback" || arg == "-r") {
+                    is_rollback = true;
+                    break;
+                }
+            }
+        }
+        if (const char* env = std::getenv("XP_ROLLBACK")) {
+            if (std::string(env) == "true" || std::string(env) == "1") {
+                is_rollback = true;
+            }
+        }
+        return is_rollback;
+    }
+
     void listen(int port) {
         listen("0.0.0.0", port);
     }
 
     void listen(const std::string& host, int port) {
+        if (isRollbackRequested()) {
+            drogon::app().run();
+            return;
+        }
+
         validateConfig(host, port);
 
         auto& fw = drogon::app();
@@ -868,6 +909,11 @@ public:
                    int                port,
                    const std::string& cert_file,
                    const std::string& key_file) {
+        if (isRollbackRequested()) {
+            drogon::app().run();
+            return;
+        }
+
         validateConfig(host, port);
 
         if (!std::filesystem::exists(cert_file)) {

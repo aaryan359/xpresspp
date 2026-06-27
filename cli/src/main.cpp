@@ -35,7 +35,11 @@ int main(int argc, char** argv) {
 
     if (command == "build")   return xp::cli::build(release);
     if (command == "run")     return xp::cli::run(release);
-    if (command == "migrate") return xp::cli::migrate();
+    if (command == "migrate") {
+        std::string arg1 = (argc > 2) ? argv[2] : "";
+        std::string arg2 = (argc > 3) ? argv[3] : "";
+        return xp::cli::migrate(arg1, arg2);
+    }
     if (command == "dockerize") return xp::cli::dockerize();
     if (command == "watch")   return xp::cli::watch();
     if (command == "dev")     return xp::cli::watch();

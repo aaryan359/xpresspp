@@ -1,6 +1,6 @@
-# Database Integration (Prisma-like ORM)
+# Database Integration (Xpress++ Database Client)
 
-Xpress++ features a native database-agnostic ORM that supports **PostgreSQL** and **MongoDB** out of the box. Database clients are compiled dynamically from your schema definition, completely hidden from your source tree, and fully integrated with C++ coroutine syntax sugar.
+Xpress++ features a native database-agnostic client engine that supports **PostgreSQL** and **MongoDB** out of the box. Database clients are compiled dynamically from your schema definition, completely hidden from your source tree, and fully integrated with C++ coroutine syntax sugar.
 
 ---
 
@@ -64,21 +64,47 @@ xp migrate
 
 ### What this does:
 1. Parses `schema.xp` and validates syntax, field types, and attributes.
-2. Synchronizes database tables or collections matching the defined models.
-3. Generates the unified, type-safe C++ Prisma-like client dynamically under the framework's vendor directory:
+2. Generates database migrations (`up.sql` and `down.sql`) inside a timestamped directory under `migrations/`.
+3. Generates the unified, type-safe C++ client dynamically in your build folder:
    ```
-   vendor/xpresspp/include/xpresspp/db.h
+   build/generated/db.h
    ```
-4. Exposes the global **`prisma`** client instance instantly in your application, requiring **zero import boilerplate**.
+   *(This ensures that your `src/` directory remains 100% clean and free of generated boilerplate).*
+4. Exposes the global **`xpd`** client instance instantly in your application, requiring **zero import boilerplate**.
 
 ---
 
-## 3. Querying the Database
+## 3. Database Migrations and Rollbacks
 
-Xpress++ routes declared as `async` can run non-blocking database queries using the global `prisma` client.
+Xpress++ automatically tracks and runs migrations to keep your database schema in sync.
+
+### A. Automatic Migration Sync
+During startup, when `SchemaSync::syncAll()` is executed:
+- The framework creates a tracking table named `_xp_migrations` if it doesn't already exist.
+- It scans the `migrations/` folder, sorting and running any outstanding migrations (by applying their `up.sql`).
+- Once successful, the applied migration's identity is stored in the database.
+
+### B. Rollback Command (`xp migrate rollback`)
+If you need to roll back the most recent migration:
+
+```bash
+xp migrate rollback
+```
+
+**Under the Hood:**
+1. The `xp` CLI builds your project and runs the compiled binary with the `--rollback` (or `-r`) flag.
+2. The application intercepts execution before starting the HTTP server or displaying the console banner.
+3. The engine connects to the database, reads the last migration from `_xp_migrations`, applies its `down.sql` rollback sequence, and removes the entry.
+4. The process exits cleanly (`exit(0)`) without binding to any network ports.
+
+---
+
+## 4. Querying the Database
+
+Xpress++ routes declared as `async` can run non-blocking database queries using the global `xpd` client.
 
 > [!IMPORTANT]
-> To avoid GCC 13 coroutine code generator compiler bugs, always declare the query as a local `xp::obj` variable before passing it to database methods.
+> To avoid GCC 13 coroutine code generator compiler bugs, always declare the query as a local `xp::var` variable before passing it to database methods.
 
 ### 1. Creating a Record (`create`)
 ```cpp
@@ -87,7 +113,7 @@ app.post("/users", [](xp::Request& req, xp::Response& res) async {
         // Read JSON body directly
         auto body = req.json();
         
-        co_await prisma.user.create(body);
+        co_await xpd.user.create(body);
         res.created({{"success", true}});
     } catch (const std::exception& e) {
         res.serverError(e.what());
@@ -101,13 +127,13 @@ app.get("/users/:id", [](xp::Request& req, xp::Response& res) async {
     try {
         const auto id = std::stoi(req.param("id"));
         
-        xp::obj query = {
-            {"where", xp::obj{
+        xp::var query = {
+            {"where", {
                 {"id", id}
             }}
         };
         
-        auto user = co_await prisma.user.findUnique(query);
+        auto user = co_await xpd.user.findUnique(query);
         if (!user.isNull()) {
             res.ok(user);
         } else {
@@ -129,16 +155,16 @@ Xpress++ supports MongoDB and SQL parameterized query operators securely:
 ```cpp
 app.get("/users", [](xp::Request& req, xp::Response& res) async {
     try {
-        xp::obj query = {
-            {"where", xp::obj{
-                {"age", xp::obj{
+        xp::var query = {
+            {"where", {
+                {"age", {
                     {"gt", 18}
                 }},
                 {"status", "active"}
             }}
         };
         
-        auto users = co_await prisma.user.findMany(query);
+        auto users = co_await xpd.user.findMany(query);
         res.ok(users);
     } catch (const std::exception& e) {
         res.serverError(e.what());
@@ -152,12 +178,12 @@ app.patch("/users/:id", [](xp::Request& req, xp::Response& res) async {
     try {
         const auto id = std::stoi(req.param("id"));
         
-        xp::obj updateQuery = {
-            {"where", xp::obj{{"id", id}}},
-            {"data", xp::obj{{"username", req.json()["username"]}}}
+        xp::var updateQuery = {
+            {"where", {{"id", id}}},
+            {"data", {{"username", req.json()["username"]}}}
         };
         
-        co_await prisma.user.update(updateQuery);
+        co_await xpd.user.update(updateQuery);
         res.ok({{"success", true}});
     } catch (const std::exception& e) {
         res.serverError(e.what());
@@ -169,47 +195,18 @@ app.patch("/users/:id", [](xp::Request& req, xp::Response& res) async {
 ```cpp
 app.del("/users", [](xp::Request& req, xp::Response& res) async {
     try {
-        xp::obj deleteQuery = {
-            {"where", xp::obj{
+        xp::var deleteQuery = {
+            {"where", {
                 {"status", "inactive"}
             }}
         };
         
-        co_await prisma.user.deleteMany(deleteQuery);
+        co_await xpd.user.deleteMany(deleteQuery);
         res.ok({{"success", true}});
     } catch (const std::exception& e) {
         res.serverError(e.what());
     }
 });
-```
-
----
-
-## 4. Startup Synchronization
-
-To ensure that your database connections are checked and new tables/collections are created at server launch, include `SchemaSync::syncAll()` inside the application `onStart` block in `main.cpp`:
-
-```cpp
-int main() {
-    xp::loadEnv();
-    xp::App app;
-    
-    // Set database connection string (from environment variable or inline)
-    app.database("postgresql://postgres:postgres@localhost:5432/testdb");
-    
-    // Auto-migrate on startup
-    app.onStart([]() async {
-        try {
-            co_await SchemaSync::syncAll();
-            std::cout << "[DB] Schema sync completed successfully." << std::endl;
-        } catch (const std::exception& e) {
-            std::cerr << "[DB Error] Sync failed: " << e.what() << std::endl;
-        }
-    });
-
-    app.listen();
-    return 0;
-}
 ```
 
 ---
@@ -245,13 +242,13 @@ At query-time, you can pass an `include` object specifying which relations you w
 ```cpp
 app.get("/users", [](xp::Request& req, xp::Response& res) async {
     try {
-        xp::obj query = {
-            {"include", xp::obj{
+        xp::var query = {
+            {"include", {
                 {"posts", true} // Eager-load Alice's posts
             }}
         };
         
-        auto users = co_await prisma.user.findMany(query);
+        auto users = co_await xpd.user.findMany(query);
         res.ok(users);
         /*
           Response JSON will be structured as:
@@ -276,13 +273,13 @@ app.get("/users", [](xp::Request& req, xp::Response& res) async {
 ```cpp
 app.get("/posts", [](xp::Request& req, xp::Response& res) async {
     try {
-        xp::obj query = {
-            {"include", xp::obj{
+        xp::var query = {
+            {"include", {
                 {"author", true} // Eager-load the author user object
             }}
         };
         
-        auto posts = co_await prisma.post.findMany(query);
+        auto posts = co_await xpd.post.findMany(query);
         res.ok(posts);
         /*
           Response JSON will be structured as:

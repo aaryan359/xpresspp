@@ -11,9 +11,9 @@ int build(bool release);
 int run(bool release);
 int watch();
 int doctor();
-int installDeps();
 int clean();
-int migrate();
+int installDeps();
+int migrate(const std::string& arg1 = "", const std::string& arg2 = "");
 int dockerize();
 
 } // namespace xp::cli

@@ -84,27 +84,42 @@ public:
     var& operator[](unsigned int index) {
         return static_cast<var&>(Json::Value::operator[](index));
     }
+    // Type-deducing constructor for JSON objects and arrays
+    var(std::initializer_list<var> items) {
+        bool is_object = (items.size() > 0);
+        for (const auto& item : items) {
+            if (!item.isArray() || item.size() != 2 || !item[0].isString()) {
+                is_object = false;
+                break;
+            }
+        }
+
+        if (is_object) {
+            *this = Json::Value(Json::objectValue);
+            for (const auto& item : items) {
+                (*this)[item[0].asString()] = item[1];
+            }
+        } else {
+            *this = Json::Value(Json::arrayValue);
+            for (const auto& item : items) {
+                this->append(item);
+            }
+        }
+    }
 };
 
 struct json_obj : public var {
     json_obj() : var(Json::objectValue) {}
-    json_obj(std::initializer_list<std::pair<std::string, var>> items) : var(Json::objectValue) {
-        for (const auto& pair : items) {
-            (*this)[pair.first] = pair.second;
-        }
-    }
+    using var::var;
 };
 
 struct json_arr : public var {
     json_arr() : var(Json::arrayValue) {}
-    json_arr(std::initializer_list<var> items) : var(Json::arrayValue) {
-        for (const auto& item : items) {
-            this->append(item);
-        }
-    }
+    using var::var;
 };
 
 using obj = json_obj;
 using arr = json_arr;
+
 
 } // namespace xp

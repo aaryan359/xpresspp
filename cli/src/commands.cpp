@@ -899,7 +899,25 @@ static std::vector<std::string> splitString(const std::string& str) {
     return tokens;
 }
 
-int migrate() {
+int migrate(const std::string& arg1, const std::string& arg2) {
+    if (arg1 == "rollback") {
+        info("Rebuilding and running database migrations rollback...");
+        if (build(false) != 0) {
+            error("Failed to build the project for rollback.");
+            return 1;
+        }
+
+        const auto binary = projectBinary();
+        if (binary.empty()) {
+            error("No executable found in ./build for rollback.");
+            return 1;
+        }
+
+        info("Running rollback: " + binary + " --rollback");
+        divider();
+        return runCommand(binary + " --rollback");
+    }
+
     std::string reason;
     if (!isXpressProject(&reason)) {
         error("Not an Xpress++ project directory.", reason,
@@ -1062,19 +1080,93 @@ int migrate() {
         }
     }
 
-    fs::path modelsDir = fs::current_path() / "vendor" / "xpresspp" / "include" / "xpresspp";
-    bool useVendor = true;
-    if (!fs::exists(modelsDir)) {
-        modelsDir = fs::current_path() / "src" / "models";
-        useVendor = false;
-    }
-    fs::create_directories(modelsDir);
+    // Generate up.sql and down.sql migrations
+    std::ostringstream up_sql;
+    std::ostringstream down_sql;
 
-    if (useVendor) {
-        info("Generating unified C++ DB client in vendor/xpresspp/include/xpresspp/db.h ...");
-    } else {
-        info("Generating unified C++ DB client in src/models/db.h ...");
+    for (const auto& model : models) {
+        up_sql << "CREATE TABLE IF NOT EXISTS " << model.tableName << " (\n";
+        bool first = true;
+        for (const auto& f : model.fields) {
+            if (f.isRelation) continue;
+            if (!first) up_sql << ",\n";
+            first = false;
+
+            std::string sql_type;
+            if (f.type == "Serial") {
+                if (dbProvider == "sqlite" || dbProvider == "sqlite3") {
+                    sql_type = "INTEGER PRIMARY KEY AUTOINCREMENT";
+                } else {
+                    sql_type = "SERIAL PRIMARY KEY";
+                }
+            } else if (f.type == "Int") {
+                sql_type = "INTEGER";
+            } else if (f.type == "Float") {
+                sql_type = "REAL";
+            } else if (f.type == "Boolean") {
+                sql_type = "BOOLEAN";
+            } else if (f.type == "DateTime") {
+                sql_type = "TIMESTAMP";
+            } else {
+                sql_type = "TEXT";
+            }
+
+            std::string opts = "";
+            if (f.isPrimaryKey && f.type != "Serial") {
+                opts += " PRIMARY KEY";
+            }
+            if (!f.nullable && !f.isPrimaryKey && f.type != "Serial") {
+                opts += " NOT NULL";
+            }
+            if (f.isUnique && !f.isPrimaryKey) {
+                opts += " UNIQUE";
+            }
+            if (f.isDefaultNow) {
+                if (dbProvider == "sqlite" || dbProvider == "sqlite3") {
+                    opts += " DEFAULT CURRENT_TIMESTAMP";
+                } else {
+                    opts += " DEFAULT NOW()";
+                }
+            }
+
+            up_sql << "  " << f.name << " " << sql_type << opts;
+        }
+        up_sql << "\n);\n\n";
+
+        down_sql << "DROP TABLE IF EXISTS " << model.tableName << ";\n";
     }
+
+    // Save migration files
+    std::string migration_name = "migration";
+    if (!arg1.empty() && arg1 != "dev" && arg1 != "--name") {
+        migration_name = arg1;
+    } else if (!arg2.empty() && arg2 != "--name") {
+        migration_name = arg2;
+    }
+
+    std::time_t t = std::time(nullptr);
+    std::tm tm = *std::localtime(&t);
+    char buf[64];
+    std::strftime(buf, sizeof(buf), "%Y%m%d%H%M%S", &tm);
+    std::string timestamp(buf);
+
+    std::string migration_dir_name = timestamp + "_" + migration_name;
+    fs::path migration_path = fs::current_path() / "migrations" / migration_dir_name;
+    fs::create_directories(migration_path);
+
+    std::ofstream up_file(migration_path / "up.sql");
+    up_file << up_sql.str();
+    up_file.close();
+
+    std::ofstream down_file(migration_path / "down.sql");
+    down_file << down_sql.str();
+    down_file.close();
+
+    success("Generated migration files in migrations/" + migration_dir_name);
+
+    fs::path modelsDir = fs::current_path() / "build" / "generated";
+    fs::create_directories(modelsDir);
+    info("Generating unified C++ DB client in build/generated/db.h ...");
 
     // Clean up old individual files if they exist to prevent clutter
     for (const auto& model : models) {
@@ -1327,20 +1419,21 @@ int migrate() {
         dbOut << "};\n\n";
     }
 
-    // 3. Write the unified PrismaClient struct
-    dbOut << "struct PrismaClient {\n";
+    // 3. Write the unified XpdClient struct
+    dbOut << "struct XpdClient {\n";
     for (const auto& model : models) {
         std::string camelName = model.name;
         if (!camelName.empty()) camelName[0] = std::tolower(camelName[0]);
         dbOut << "    " << model.name << "Client " << camelName << ";\n";
     }
     dbOut << "};\n\n";
-    dbOut << "inline constexpr PrismaClient prisma{};\n\n";
+    dbOut << "inline constexpr XpdClient xpd{};\n\n";
 
     // 4. Write SchemaSync inside db.h
     dbOut << "class SchemaSync {\n";
     dbOut << "public:\n";
     dbOut << "    static drogon::Task<void> syncAll() {\n";
+    dbOut << "        co_await xp::DatabaseManager::instance().runMigrations();\n";
     for (const auto& model : models) {
         dbOut << "        co_await ::" << model.name << "::sync();\n";
     }
@@ -1348,13 +1441,9 @@ int migrate() {
     dbOut << "    }\n";
     dbOut << "};\n";
 
-    if (useVendor) {
-        success("Generated unified Prisma-like client in vendor/xpresspp/include/xpresspp/db.h");
-    } else {
-        success("Generated unified Prisma-like client in src/models/db.h");
-    }
+    success("Generated unified Xpress++ DB client in build/generated/db.h");
     divider();
-    success("Migration structures generated successfully! You can now use 'prisma' in your controllers and SchemaSync::syncAll() in your DB configuration.");
+    success("Migration structures generated successfully! You can now use 'xpd' in your controllers and SchemaSync::syncAll() in your DB configuration.");
     return 0;
 }
 

@@ -59,6 +59,7 @@ add_executable(${PROJECT_NAME} main.cpp)
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
+    ${CMAKE_CURRENT_LIST_DIR}/build/generated
     ${CMAKE_CURRENT_LIST_DIR}/src/models
     ${CMAKE_CURRENT_LIST_DIR}/vendor/xpresspp/include
     ${CMAKE_CURRENT_LIST_DIR}/../../core/include

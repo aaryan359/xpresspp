@@ -35,11 +35,13 @@ int main() {
     app.post("/users", [](xp::Request& req, xp::Response& res) async {
         try {
             auto body = req.json();
+
             if (body["username"].isNull()) {
                 res.badRequest("Missing username");
                 co_return;
             }
             await xpd.user.create(body);
+            
             res.created({{"success", true}});
         } catch (const std::exception& e) {
             res.serverError(e.what());

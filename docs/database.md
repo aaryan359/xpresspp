@@ -370,3 +370,23 @@ app.get("/users", [](xp::Request& req, xp::Response& res) async {
     }
 });
 ```
+
+---
+
+## 6. Security, Reliability & Design Principles
+
+Xpress++ is designed from the ground up for high-concurrency, safe production environments.
+
+### A. SQL Injection Prevention (Parameterized Bindings)
+Unlike simple ORMs that use insecure string concatenation or raw value escaping, the Xpress++ database client compiles queries using **native parameterized bindings** (`$1`, `$2`, etc. for PostgreSQL, and standard parameter slots for SQLite).
+*   User input is sent separately from the SQL statement execution structure.
+*   It is mathematically impossible for an attacker to break out of the query context, ensuring **100% protection against SQL injection attacks**.
+
+### B. Clean Workspace Architecture (Dynamic Client Relocation)
+To keep your project’s codebase pristine and prevent accidental modification of generated database definitions:
+*   The generated database client is stored in the project's build directory (`build/generated/db.h`) instead of your source directories.
+*   This removes git diff noise, avoids merge conflicts on schema updates, and separates developer-written source code from auto-generated code.
+
+### C. Safe & Coroutine-Compliant Migrations
+*   **Transaction-Safe Rollbacks**: Rollback operations run inside secure database transactions where supported. If a rollback step fails halfway, the database is restored back to its previous state.
+*   **C++20 Compliance**: The database execution engine is carefully designed to execute asynchronous database hooks (`co_await`) outside exception handlers (`catch` blocks), adhering strictly to C++ compiler standards and avoiding undefined compiler behavior.

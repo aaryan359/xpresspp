@@ -74,41 +74,77 @@ inline std::string padLeft(const std::string& s, std::size_t width) {
 inline Middleware logger() {
     return [](Request& req, Response& res, Next next) {
         const auto started = std::chrono::steady_clock::now();
-        next();
-        const auto finished  = std::chrono::steady_clock::now();
-        const auto elapsed   = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                   finished - started).count();
+        if (current_request_context) {
+            current_request_context->after_handlers.push_back([started](Request& req, Response& res) {
+                const auto finished  = std::chrono::steady_clock::now();
+                const auto elapsed   = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                           finished - started).count();
 
-        const int  code      = res.statusCode();
-        const auto method    = req.method();
-        const auto path      = req.path();
+                const int  code      = res.statusCode();
+                const auto method    = req.method();
+                const auto path      = req.path();
 
-        // Build elapsed time string
-        std::string time_str;
-        if (elapsed < 1000) {
-            time_str = std::to_string(elapsed) + "ms";
+                // Build elapsed time string
+                std::string time_str;
+                if (elapsed < 1000) {
+                    time_str = std::to_string(elapsed) + "ms";
+                } else {
+                    time_str = std::to_string(elapsed / 1000) + "." +
+                               std::to_string((elapsed % 1000) / 10) + "s";
+                }
+
+                // ──────────────────────────────────────────────────
+                //  Print the log line
+                // ──────────────────────────────────────────────────
+                std::cout
+                    << detail::methodColor(method) << detail::bold()
+                    << detail::padLeft(method, 7)          // right-pad method
+                    << detail::reset()
+                    << "  "
+                    << path
+                    << "  "
+                    << detail::statusColor(code) << detail::bold()
+                    << code
+                    << detail::reset()
+                    << detail::dim()
+                    << "  " << time_str
+                    << detail::reset()
+                    << "\n";
+            });
+            next();
         } else {
-            time_str = std::to_string(elapsed / 1000) + "." +
-                       std::to_string((elapsed % 1000) / 10) + "s";
-        }
+            next();
+            const auto finished  = std::chrono::steady_clock::now();
+            const auto elapsed   = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                       finished - started).count();
 
-        // ──────────────────────────────────────────────────
-        //  Print the log line
-        // ──────────────────────────────────────────────────
-        std::cout
-            << detail::methodColor(method) << detail::bold()
-            << detail::padLeft(method, 7)          // right-pad method
-            << detail::reset()
-            << "  "
-            << path
-            << "  "
-            << detail::statusColor(code) << detail::bold()
-            << code
-            << detail::reset()
-            << detail::dim()
-            << "  " << time_str
-            << detail::reset()
-            << "\n";
+            const int  code      = res.statusCode();
+            const auto method    = req.method();
+            const auto path      = req.path();
+
+            std::string time_str;
+            if (elapsed < 1000) {
+                time_str = std::to_string(elapsed) + "ms";
+            } else {
+                time_str = std::to_string(elapsed / 1000) + "." +
+                           std::to_string((elapsed % 1000) / 10) + "s";
+            }
+
+            std::cout
+                << detail::methodColor(method) << detail::bold()
+                << detail::padLeft(method, 7)
+                << detail::reset()
+                << "  "
+                << path
+                << "  "
+                << detail::statusColor(code) << detail::bold()
+                << code
+                << detail::reset()
+                << detail::dim()
+                << "  " << time_str
+                << detail::reset()
+                << "\n";
+        }
     };
 }
 
@@ -122,31 +158,60 @@ inline Middleware logger() {
 inline Middleware combinedLogger() {
     return [](Request& req, Response& res, Next next) {
         const auto started = std::chrono::steady_clock::now();
-        next();
-        const auto finished = std::chrono::steady_clock::now();
-        const auto elapsed  = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                  finished - started).count();
+        if (current_request_context) {
+            current_request_context->after_handlers.push_back([started](Request& req, Response& res) {
+                const auto finished = std::chrono::steady_clock::now();
+                const auto elapsed  = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                          finished - started).count();
 
-        // Timestamp
-        const auto now_t = std::chrono::system_clock::to_time_t(
-                               std::chrono::system_clock::now());
-        char ts[24];
-        std::strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", std::localtime(&now_t));
+                // Timestamp
+                const auto now_t = std::chrono::system_clock::to_time_t(
+                                       std::chrono::system_clock::now());
+                char ts[24];
+                std::strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", std::localtime(&now_t));
 
-        const int  code   = res.statusCode();
-        const auto method = req.method();
-        const auto path   = req.path();
-        const auto ip     = req.ip();
-        const auto ua     = req.userAgent();
+                const int  code   = res.statusCode();
+                const auto method = req.method();
+                const auto path   = req.path();
+                const auto ip     = req.ip();
+                const auto ua     = req.userAgent();
 
-        std::cout
-            << "[" << ts << "] "
-            << detail::methodColor(method)  << method << detail::reset()
-            << " " << path
-            << " " << detail::statusColor(code) << code << detail::reset()
-            << " " << elapsed << "ms"
-            << " - \"" << ua << "\""
-            << "\n";
+                std::cout
+                    << "[" << ts << "] "
+                    << detail::methodColor(method)  << method << detail::reset()
+                    << " " << path
+                    << " " << detail::statusColor(code) << code << detail::reset()
+                    << " " << elapsed << "ms"
+                    << " - \"" << ua << "\""
+                    << "\n";
+            });
+            next();
+        } else {
+            next();
+            const auto finished = std::chrono::steady_clock::now();
+            const auto elapsed  = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                      finished - started).count();
+
+            const auto now_t = std::chrono::system_clock::to_time_t(
+                                   std::chrono::system_clock::now());
+            char ts[24];
+            std::strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", std::localtime(&now_t));
+
+            const int  code   = res.statusCode();
+            const auto method = req.method();
+            const auto path   = req.path();
+            const auto ip     = req.ip();
+            const auto ua     = req.userAgent();
+
+            std::cout
+                << "[" << ts << "] "
+                << detail::methodColor(method)  << method << detail::reset()
+                << " " << path
+                << " " << detail::statusColor(code) << code << detail::reset()
+                << " " << elapsed << "ms"
+                << " - \"" << ua << "\""
+                << "\n";
+        }
     };
 }
 

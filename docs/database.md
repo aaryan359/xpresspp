@@ -300,3 +300,73 @@ app.get("/posts", [](xp::Request& req, xp::Response& res) async {
     }
 });
 ```
+
+### 3. Many-to-Many Relations (Explicit Junction Tables)
+
+Xpress++ enforces **Explicit Junction Tables** (also known as join or pivot tables) for Many-to-Many relations. This design ensures optimal compiler-optimized SQL generation, eliminates hidden ORM performance traps, and allows you to attach custom attributes to the relationship itself.
+
+#### Defining Many-to-Many in `schema.xp`
+Instead of using implicit arrays on both sides, define a junction model (e.g., `UserPost`) that contains foreign keys referencing both targets:
+
+```prisma
+model User {
+  id        Int        @id @default(autoincrement())
+  username  String     @unique
+  posts     UserPost[] // Virtual relationship referencing the junction table
+}
+
+model Post {
+  id        Int        @id @default(autoincrement())
+  title     String
+  users     UserPost[] // Virtual relationship referencing the junction table
+}
+
+// Explicit Junction Table
+model UserPost {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  postId     Int
+  user       User     @relation(fields: [userId], references: [id])
+  post       Post     @relation(fields: [postId], references: [id])
+  
+  // Custom metadata (completely supported!)
+  assignedAt DateTime @default(now())
+}
+```
+
+#### Querying & Nested Eager-Loading
+You can eagerly load the junction table and its parent objects recursively:
+
+```cpp
+app.get("/users", [](xp::Request& req, xp::Response& res) async {
+    try {
+        xp::var query = {
+            {"include", {
+                {"posts", true} // Eager-loads the junction entries
+            }}
+        };
+        
+        auto users = co_await xpd.user.findMany(query);
+        res.ok(users);
+        /*
+          Response JSON will be structured as:
+          [
+            {
+              "id": 1,
+              "username": "alice",
+              "posts": [
+                {
+                  "id": 501,
+                  "userId": 1,
+                  "postId": 101,
+                  "assignedAt": "2026-06-27T12:00:00Z"
+                }
+              ]
+            }
+          ]
+        */
+    } catch (const std::exception& e) {
+        res.serverError(e.what());
+    }
+});
+```

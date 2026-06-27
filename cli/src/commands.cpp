@@ -852,7 +852,7 @@ int clean() {
 }
 
 // ============================================================
-//  Migrate Command (Prisma-like Schema Parser and Generator)
+//  Migrate Command (Xpress++ Database Schema Parser and Generator)
 // ============================================================
 struct FieldInfo {
     std::string name;

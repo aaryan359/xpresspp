@@ -22,7 +22,7 @@ With **Xpress++ Asynchronous Coroutines**:
 // Verbose, boilerplate-heavy syntax
 app.get("/users", [](xp::Request& req, xp::Response& res) -> xp::Task<void> {
     try {
-        auto users = co_await prisma.user.findMany();
+        auto users = co_await xpd.user.findMany();
         res.json(users);
     } catch (const std::exception& e) {
         res.status(500).json({{"error", e.what()}});
@@ -36,7 +36,7 @@ app.get("/users", [](xp::Request& req, xp::Response& res) -> xp::Task<void> {
 // Clean, Express-like async/await syntax
 app.get("/users", [](xp::Request& req, xp::Response& res) async {
     try {
-        auto users = await prisma.user.findMany();
+        auto users = await xpd.user.findMany();
         res.json(users);
     } catch (const std::exception& e) {
         res.status(500).json({{"error", e.what()}});
@@ -64,12 +64,12 @@ If you are writing a custom helper function that uses `async`, its return type m
 ```cpp
 // A custom async helper function
 xp::Task<Json::Value> fetchUserEmail(int userId) async {
-    xp::obj query = {
-        {"where", xp::obj{
+    xp::var query = {
+        {"where", {
             {"id", userId}
         }}
     };
-    auto user = await prisma.user.findUnique(query);
+    auto user = await xpd.user.findUnique(query);
     if (user.isNull()) {
         co_return "";
     }
@@ -87,12 +87,12 @@ app.get("/check-user", [](xp::Request& req, xp::Response& res) async {
         co_return; // Exits the async coroutine safely
     }
 
-    xp::obj query = {
-        {"where", xp::obj{
+    xp::var query = {
+        {"where", {
             {"username", username}
         }}
     };
-    auto user = await prisma.user.findUnique(query);
+    auto user = await xpd.user.findUnique(query);
     res.json({{"exists", !user.isNull()}});
 });
 ```
@@ -108,22 +108,22 @@ You can chain multiple `await` calls sequentially inside your handler:
 app.get("/api/v1/profile", [](xp::Request& req, xp::Response& res) async {
     auto userId = std::stoi(req.query("id"));
 
-    xp::obj userQuery = {
-        {"where", xp::obj{{"id", userId}}}
+    xp::var userQuery = {
+        {"where", {{"id", userId}}}
     };
 
     // Fetch user details first
-    auto user = await prisma.user.findUnique(userQuery);
+    auto user = await xpd.user.findUnique(userQuery);
     if (user.isNull()) {
         res.status(404).json({{"error", "User not found"}});
         co_return;
     }
 
-    xp::obj logsQuery = {
-        {"where", xp::obj{{"user_id", userId}}}
+    xp::var logsQuery = {
+        {"where", {{"user_id", userId}}}
     };
     // Fetch logs using info from the user result
-    auto logs = await prisma.auditLog.findMany(logsQuery);
+    auto logs = await xpd.auditLog.findMany(logsQuery);
 
     res.json({
         {"user", user},
@@ -133,15 +133,14 @@ app.get("/api/v1/profile", [](xp::Request& req, xp::Response& res) async {
 ```
 
 ### 2. Startup Tasks (`app.onStart`)
-You can register async callbacks during application startup. This is perfect for setting up database schemas:
+You can register async callbacks during application startup. This is perfect for warm-up tasks like priming an in-memory cache:
 
 ```cpp
 app.onStart([]() async {
-    std::cout << "Starting database initialization..." << std::endl;
+    std::cout << "Priming startup cache..." << std::endl;
     
-    // Auto sync tables/collections with schema.xp
-    co_await SchemaSync::syncAll();
+    co_await myCache.prime();
     
-    std::cout << "System ready!" << std::endl;
+    std::cout << "Cache primed and system ready!" << std::endl;
 });
 ```

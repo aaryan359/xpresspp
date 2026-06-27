@@ -45,8 +45,8 @@ Simply declare your route lambda as `async`, and use `await` before any asynchro
 ```cpp
 app.get("/api/users", [](xp::Request& req, xp::Response& res) async {
     try {
-        // Query the database asynchronously using the generated Prisma-like ORM
-        auto users = await prisma.user.findMany();
+        // Query the database asynchronously using the generated database client
+        auto users = await xpd.user.findMany();
         res.json(users);
     } catch (const std::exception& e) {
         res.status(500).json({{"error", e.what()}});

@@ -66,20 +66,11 @@ int main() {
     // Database Setup
     app.database("postgresql://postgres:postgres@localhost:5432/my_app");
 
-    // Initialize/sync database schema on startup
-    app.onStart([]() async {
-        try {
-            co_await SchemaSync::syncAll();
-        } catch (const exception& e) {
-            cerr << "DB Sync failed: " << e.what() << endl;
-        }
-    });
-
     // POST /api/auth/signup - Register a user
     app.post("/api/auth/signup", [](xp::Request& req, xp::Response& res) async {
         try {
             auto body = req.json();
-            await prisma.user.create(body);
+            await xpd.user.create(body);
             res.json({{"success", true}, {"message", "Registered successfully"}});
         } catch (...) {
             res.status(400).json({{"error", "Registration failed"}});
@@ -93,12 +84,12 @@ int main() {
             auto username = body["username"].asString();
             auto password = body["password"].asString();
             
-            xp::obj query = {
-                {"where", xp::obj{
+            xp::var query = {
+                {"where", {
                     {"username", username}
                 }}
             };
-            auto user = await prisma.user.findUnique(query);
+            auto user = await xpd.user.findUnique(query);
             
             if (user.isNull() || user["password"].asString() != password) {
                 res.status(401).json({{"error", "Invalid credentials"}});

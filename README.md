@@ -285,9 +285,9 @@ app.onError([](const std::exception& e, xp::Request& req, xp::Response& res) {
 
 ---
 
-## Database & ORM (Prisma-like Client)
+## Database & ORM (Xpress++ Database Client)
 
-Xpress++ features a native database-agnostic ORM that supports **PostgreSQL** and **MongoDB** out of the box. Database clients are compiled from your schema definition, completely hidden from your source tree, and fully integrated with Express-like syntax sugar.
+Xpress++ features a native database-agnostic client engine that supports **PostgreSQL** and **MongoDB** out of the box. Database clients are compiled from your schema definition, completely hidden from your source tree, and fully integrated with Express-like syntax sugar.
 
 ### 1. Define your schema (`schema.xp`)
 
@@ -314,18 +314,18 @@ Run the migrate command to synchronize your schema with the database and generat
 xp migrate
 ```
 
-This compiles a unified client hidden in the vendor folder (`vendor/xpresspp/include/xpresspp/db.h`) and creates a global, ready-to-use database client instance named `prisma`.
+This compiles a unified client dynamically in your build folder (`build/generated/db.h`) and exposes a global, ready-to-use database client instance named `xpd`.
 
 ### 3. Querying the Database (C++ Coroutine Syntax)
 
-To make querying as close to JavaScript/Node.js as possible, Xpress++ defines `async` and `await` keywords, and provides `xp::obj` for clean JSON object initialization.
+To make querying as close to JavaScript/Node.js as possible, Xpress++ defines `async` and `await` keywords, and provides `xp::var` for clean JSON object initialization.
 
 #### Creating a user:
 ```cpp
 app.post("/users", [](xp::Request& req, xp::Response& res) async {
     try {
         auto body = req.json();
-        await prisma.user.create(body);
+        await xpd.user.create(body);
         res.created({{"success", true}});
     } catch (const std::exception& e) {
         res.serverError(e.what());
@@ -338,16 +338,16 @@ app.post("/users", [](xp::Request& req, xp::Response& res) async {
 app.get("/users", [](xp::Request& req, xp::Response& res) async {
     try {
         // Safe from SQL injection via automatically generated parameterized bindings
-        xp::obj query = {
-            {"where", xp::obj{
-                {"age", xp::obj{
+        xp::var query = {
+            {"where", {
+                {"age", {
                     {"gt", 18}
                 }},
                 {"status", "active"}
             }}
         };
         
-        auto users = await prisma.user.findMany(query);
+        auto users = await xpd.user.findMany(query);
         res.ok(users);
     } catch (const std::exception& e) {
         res.serverError(e.what());
@@ -361,12 +361,12 @@ app.patch("/users/:id", [](xp::Request& req, xp::Response& res) async {
     try {
         const auto id = std::stoi(req.param("id"));
         
-        xp::obj updateQuery = {
-            {"where", xp::obj{{"id", id}}},
-            {"data", xp::obj{{"username", req.json()["username"]}}}
+        xp::var updateQuery = {
+            {"where", {{"id", id}}},
+            {"data", {{"username", req.json()["username"]}}}
         };
         
-        await prisma.user.update(updateQuery);
+        await xpd.user.update(updateQuery);
         res.ok({{"success", true}});
     } catch (const std::exception& e) {
         res.serverError(e.what());

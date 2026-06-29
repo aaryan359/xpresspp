@@ -328,20 +328,16 @@ private:
 public:
     void handleRequest(const drogon::HttpRequestPtr&                       native_req,
                        std::function<void(const drogon::HttpResponsePtr&)>&& callback) {
-        std::cout << "[handleRequest DEBUG] Entered handleRequest." << std::endl;
         std::shared_ptr<RequestContext> ctx;
         try {
             ctx = std::make_shared<RequestContext>(native_req, after_handlers_, std::move(callback));
-            std::cout << "[handleRequest DEBUG] RequestContext allocated." << std::endl;
         } catch (const std::exception& e) {
-            std::cerr << "[handleRequest DEBUG] Failed allocating RequestContext: " << e.what() << std::endl;
             throw;
         }
         current_request_context = ctx;
 
         try {
             auto final_handler = [this](std::shared_ptr<RequestContext>& f_ctx) {
-                std::cout << "[handleRequest DEBUG] final_handler invoked." << std::endl;
                 if (serveStatic(f_ctx->req, f_ctx->res)) {
                     f_ctx->finish();
                     return;

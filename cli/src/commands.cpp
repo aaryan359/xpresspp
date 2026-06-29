@@ -137,9 +137,13 @@ int createApp(const std::string& name) {
         << "endif()\n\n"
         << "add_executable(" << name << " main.cpp)\n"
         << "if(DEFINED ENV{XPRESSPP_HOME})\n"
-        << "    target_include_directories(" << name << " PRIVATE $ENV{XPRESSPP_HOME}/core/include)\n"
+        << "    target_include_directories(" << name << " PRIVATE\n"
+        << "        $ENV{XPRESSPP_HOME}/core/include\n"
+        << "        ${CMAKE_CURRENT_LIST_DIR}/build/generated)\n"
         << "else()\n"
-        << "    target_include_directories(" << name << " PRIVATE ${CMAKE_CURRENT_LIST_DIR}/vendor/xpresspp/include)\n"
+        << "    target_include_directories(" << name << " PRIVATE\n"
+        << "        ${CMAKE_CURRENT_LIST_DIR}/vendor/xpresspp/include\n"
+        << "        ${CMAKE_CURRENT_LIST_DIR}/build/generated)\n"
         << "endif()\n"
         << "target_link_libraries(" << name << " PRIVATE Drogon::Drogon)\n\n"
         << "if(TARGET jsoncpp_lib)\n"
@@ -1390,12 +1394,15 @@ int migrate(const std::string& arg1, const std::string& arg2) {
         dbOut << "        co_return co_await findUnique(query);\n";
         dbOut << "    }\n\n";
 
-        dbOut << "    drogon::Task<void> update(const Json::Value& where, const Json::Value& data) const {\n";
-        dbOut << "        co_await ::" << model.name << "::update(where, data);\n";
+        dbOut << "    drogon::Task<void> update(const Json::Value& query) const {\n";
+        dbOut << "        Json::Value w = query.isMember(\"where\") ? query[\"where\"] : Json::Value(Json::objectValue);\n";
+        dbOut << "        Json::Value d = query.isMember(\"data\") ? query[\"data\"] : Json::Value(Json::objectValue);\n";
+        dbOut << "        co_await ::" << model.name << "::update(w, d);\n";
         dbOut << "    }\n\n";
 
-        dbOut << "    drogon::Task<void> deleteMany(const Json::Value& where) const {\n";
-        dbOut << "        co_await ::" << model.name << "::deleteMany(where);\n";
+        dbOut << "    drogon::Task<void> deleteMany(const Json::Value& query) const {\n";
+        dbOut << "        Json::Value w = query.isMember(\"where\") ? query[\"where\"] : query;\n";
+        dbOut << "        co_await ::" << model.name << "::deleteMany(w);\n";
         dbOut << "    }\n\n";
 
         // FindBy[FieldName] helpers
@@ -1433,6 +1440,11 @@ int migrate(const std::string& arg1, const std::string& arg2) {
     dbOut << "class SchemaSync {\n";
     dbOut << "public:\n";
     dbOut << "    static drogon::Task<void> syncAll() {\n";
+    if (dbProvider == "sqlite" || dbProvider == "sqlite3") {
+        dbOut << "        // Enable FK enforcement for SQLite\n";
+        dbOut << "        { auto _fk_client = drogon::app().getDbClient(\"default\");\n";
+        dbOut << "          if (_fk_client) { try { co_await xp::executeParameterized(_fk_client, \"PRAGMA foreign_keys = ON;\", {}); } catch (...) {} } }\n";
+    }
     dbOut << "        co_await xp::DatabaseManager::instance().runMigrations();\n";
     for (const auto& model : models) {
         dbOut << "        co_await ::" << model.name << "::sync();\n";

@@ -1,5 +1,4 @@
 #include <xpresspp/xpresspp.h>
-#include <iostream>
 
 int main() {
     xp::loadEnv();
@@ -8,74 +7,28 @@ int main() {
     app.use(xp::logger());
     app.use(xp::cors());
 
-    // Configure database connection URL (Change to postgresql or mongodb if using docker)
-    app.database("sqlite3://test.db");
+    // ── Routes ────────────────────────────────────────────────────────────────
 
-
-
-    // 1. Root index endpoint
     app.get("/", [](xp::Request& req, xp::Response& res) {
-        res.ok({{"message", "Hello from Xpress++"}});
+        res.ok({{"message", "Hello from Xpress++!"}});
     });
 
-    // 2. Fetch all users (eager loading their posts)
-    app.get("/users", [](xp::Request& req, xp::Response& res) async {
-        try {
-            xp::var query = {
-                {"include", {{"posts", true}}}
-            };
-            auto users = await xpd.user.findMany(query);
-            res.ok(users);
-            
-        } catch (const std::exception& e) {
-            res.serverError(e.what());
-        }
+    app.get("/ping", [](xp::Request& req, xp::Response& res) {
+        res.ok({{"status", "ok"}});
     });
 
-    // 3. Create a new user
-    app.post("/users", [](xp::Request& req, xp::Response& res) async {
-        try {
-            auto body = req.json();
-
-            if (body["username"].isNull()) {
-                res.badRequest("Missing username");
-                co_return;
-            }
-            await xpd.user.create(body);
-
-            res.created({{"success", true}});
-        } catch (const std::exception& e) {
-            res.serverError(e.what());
-        }
-    });
-
-    // 4. Fetch all posts (eager loading their author)
-    app.get("/posts", [](xp::Request& req, xp::Response& res) async {
-        try {
-            xp::var query = {
-                {"include", {{"author", true}}}
-            };
-            auto posts = await xpd.post.findMany(query);
-            res.ok(posts);
-        } catch (const std::exception& e) {
-            res.serverError(e.what());
-        }
-    });
-
-    // 5. Create a new post
-    app.post("/posts", [](xp::Request& req, xp::Response& res) async {
-        try {
-            auto body = req.json();
-            if (body["title"].isNull() || body["authorId"].isNull()) {
-                res.badRequest("Missing title or authorId");
-                co_return;
-            }
-            await xpd.post.create(body);
-            res.created({{"success", true}});
-        } catch (const std::exception& e) {
-            res.serverError(e.what());
-        }
-    });
+    // ── To add database support ───────────────────────────────────────────────
+    //
+    //  1. Edit schema.xp to define your models
+    //  2. Run:  xp migrate
+    //  3. Connect inside main():
+    //       app.database("sqlite3://app.db");
+    //  4. Then use the xpd client in async routes:
+    //       app.get("/users", [](xp::Request& req, xp::Response& res) async {
+    //           auto users = await xpd.user.findMany();
+    //           res.ok(users);
+    //       });
+    // ─────────────────────────────────────────────────────────────────────────
 
     app.listen();
     return 0;

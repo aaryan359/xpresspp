@@ -101,12 +101,6 @@ int createApp(const std::string& name) {
     info("Creating project \"" + name + "\" ...");
     copyDirectory(template_dir, target);
 
-    if (std::getenv("XPRESSPP_HOME") == nullptr) {
-        copyDirectory(core_include, target / "vendor" / "xpresspp" / "include");
-    } else {
-        info("XPRESSPP_HOME environment variable detected. Skipping vendor/ directory copy.");
-    }
-
     // Write CMakeLists.txt
     std::ofstream cmake(target / "CMakeLists.txt");
     if (!cmake) {
@@ -120,6 +114,8 @@ int createApp(const std::string& name) {
         << "set(CMAKE_CXX_STANDARD_REQUIRED ON)\n"
         << "set(CMAKE_CXX_EXTENSIONS OFF)\n"
         << "set(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n\n"
+        << "# Set XPRESSPP_HOME path to find core headers\n"
+        << "set(XPRESSPP_HOME \"" << root.string() << "\")\n\n"
         << "# Try system Drogon first; fall back to downloading from GitHub.\n"
         << "find_package(Drogon QUIET)\n"
         << "if(NOT Drogon_FOUND)\n"
@@ -136,15 +132,9 @@ int createApp(const std::string& name) {
         << "    FetchContent_MakeAvailable(drogon)\n"
         << "endif()\n\n"
         << "add_executable(" << name << " main.cpp)\n"
-        << "if(DEFINED ENV{XPRESSPP_HOME})\n"
-        << "    target_include_directories(" << name << " PRIVATE\n"
-        << "        $ENV{XPRESSPP_HOME}/core/include\n"
-        << "        ${CMAKE_CURRENT_LIST_DIR}/build/generated)\n"
-        << "else()\n"
-        << "    target_include_directories(" << name << " PRIVATE\n"
-        << "        ${CMAKE_CURRENT_LIST_DIR}/vendor/xpresspp/include\n"
-        << "        ${CMAKE_CURRENT_LIST_DIR}/build/generated)\n"
-        << "endif()\n"
+        << "target_include_directories(" << name << " PRIVATE\n"
+        << "    ${XPRESSPP_HOME}/core/include\n"
+        << "    ${CMAKE_CURRENT_LIST_DIR}/build/generated)\n"
         << "target_link_libraries(" << name << " PRIVATE Drogon::Drogon)\n\n"
         << "if(TARGET jsoncpp_lib)\n"
         << "    target_link_libraries(" << name << " PRIVATE jsoncpp_lib)\n"
@@ -163,7 +153,6 @@ int createApp(const std::string& name) {
     gitignore
         << "build/\n"
         << ".vscode/\n"
-        << "uploads/tmp/\n"
         << ".env\n"          // never commit secrets
         << "*.db\n"
         << "*.log\n";
@@ -180,8 +169,7 @@ int createApp(const std::string& name) {
                 << "            \"name\": \"Linux\",\n"
                 << "            \"includePath\": [\n"
                 << "                \"${workspaceFolder}/**\",\n"
-                << "                \"${env:XPRESSPP_HOME}/core/include\",\n"
-                << "                \"${workspaceFolder}/vendor/xpresspp/include\",\n"
+                << "                \"" << (root / "core" / "include").string() << "\",\n"
                 << "                \"/usr/include/jsoncpp\"\n"
                 << "            ],\n"
                 << "            \"defines\": [],\n"

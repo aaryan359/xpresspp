@@ -6,6 +6,7 @@
 #include "router.h"
 #include "database.h"
 #include "websocket.h"
+#include "env.h"
 
 #include <drogon/drogon.h>
 #include <json/json.h>
@@ -492,6 +493,9 @@ public:
     }
 
     App() {
+        // Load env variables if they aren't loaded yet
+        xp::loadEnv();
+
         drogon::app().registerBeginningAdvice([]() {
             bool is_rollback = false;
             bool is_migrate = false;
@@ -903,15 +907,33 @@ public:
         return is_migrate;
     }
 
+    void handleMigrationIfRequested() {
+        if (isRollbackRequested() || isMigrateRequested()) {
+            xp::loadEnv();
+            if (!xp::DatabaseManager::instance().isConnected()) {
+                if (const char* db_url = std::getenv("DATABASE_URL")) {
+                    try {
+                        this->database(db_url);
+                    } catch (const std::exception& e) {
+                        std::cerr << "[Xpress++ Migration Error] Failed to auto-configure database from DATABASE_URL: " << e.what() << std::endl;
+                        std::exit(1);
+                    }
+                } else {
+                    std::cerr << "[Xpress++ Migration Error] Database is not configured. Please define DATABASE_URL in your .env file or call app.database() in main.cpp." << std::endl;
+                    std::exit(1);
+                }
+            }
+            drogon::app().run();
+            std::exit(0);
+        }
+    }
+
     void listen(int port) {
         listen("0.0.0.0", port);
     }
 
     void listen(const std::string& host, int port) {
-        if (isRollbackRequested() || isMigrateRequested()) {
-            drogon::app().run();
-            return;
-        }
+        handleMigrationIfRequested();
 
         validateConfig(host, port);
 
@@ -943,10 +965,7 @@ public:
                    int                port,
                    const std::string& cert_file,
                    const std::string& key_file) {
-        if (isRollbackRequested() || isMigrateRequested()) {
-            drogon::app().run();
-            return;
-        }
+        handleMigrationIfRequested();
 
         validateConfig(host, port);
 

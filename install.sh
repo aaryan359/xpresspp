@@ -80,23 +80,25 @@ install_deps() {
                 step "Installing Homebrew..."
                 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
             fi
-            brew install cmake jsoncpp openssl zlib ossp-uuid
+            brew install cmake jsoncpp openssl zlib ossp-uuid sqlite libpq
             ;;
         arch)
             sudo pacman -Sy --noconfirm \
                 base-devel git cmake \
-                jsoncpp openssl zlib uuid
+                jsoncpp openssl zlib uuid \
+                postgresql-libs sqlite mariadb-libs
             ;;
         fedora)
             sudo dnf install -y \
                 gcc-c++ git cmake \
                 openssl-devel jsoncpp-devel zlib-devel \
-                libuuid-devel
+                libuuid-devel libpq-devel sqlite-devel mariadb-devel
             ;;
         suse)
             sudo zypper install -y \
                 gcc-c++ git cmake \
-                libopenssl-devel jsoncpp-devel zlib-devel
+                libopenssl-devel jsoncpp-devel zlib-devel \
+                postgresql-devel sqlite3-devel
             ;;
     esac
 
@@ -142,7 +144,7 @@ install_drogon() {
         -DCMAKE_BUILD_TYPE=Release \
         -DBUILD_EXAMPLES=OFF \
         -DBUILD_CTL=OFF \
-        -DBUILD_ORM=OFF \
+        -DBUILD_ORM=ON \
         >/dev/null
 
     cmake --build "${tmp_dir}/drogon/build" --parallel "$(nproc 2>/dev/null || echo 4)"

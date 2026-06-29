@@ -679,6 +679,10 @@ public:
         return inst;
     }
 
+    bool isConnected() const {
+        return active_driver_ != nullptr;
+    }
+
     void registerSync(std::function<drogon::Task<void>()> cb) {
         sync_callback_ = std::move(cb);
     }

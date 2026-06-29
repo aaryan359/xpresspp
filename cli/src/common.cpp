@@ -8,6 +8,12 @@
 #include <unistd.h>
 #endif
 
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#endif
+#include <climits>
+#include <vector>
+
 namespace xp::cli {
 
 namespace colour {
@@ -119,8 +125,30 @@ std::string captureCommand(const std::string& command) {
     return result;
 }
 
+fs::path getExecutablePath() {
+#if defined(_WIN32)
+    char path[MAX_PATH];
+    GetModuleFileNameA(NULL, path, MAX_PATH);
+    return fs::path(path);
+#elif defined(__APPLE__)
+    char path[PATH_MAX];
+    uint32_t size = sizeof(path);
+    if (_NSGetExecutablePath(path, &size) == 0) {
+        return fs::path(path);
+    }
+    return "";
+#else
+    char result[PATH_MAX];
+    ssize_t count = readlink("/proc/self/exe", result, PATH_MAX);
+    if (count != -1) {
+        return fs::path(std::string(result, count));
+    }
+    return "";
+#endif
+}
+
 fs::path repoRoot() {
-    // Prefer explicit env vars
+    // 1. Prefer explicit env vars
     if (const char* env = std::getenv("XPRESSPP_HOME")) {
         return fs::path(env);
     }
@@ -140,7 +168,21 @@ fs::path repoRoot() {
         }
     }
 
-    // Walk up from cwd
+    // 2. Walk up from the executable path itself
+    auto exe_path = getExecutablePath();
+    if (!exe_path.empty()) {
+        auto current = fs::weakly_canonical(exe_path).parent_path();
+        while (!current.empty()) {
+            if (fs::exists(current / "core" / "include" / "xpresspp" / "xpresspp.h") &&
+                fs::exists(current / "templates" / "default_app")) {
+                return current;
+            }
+            if (current == current.root_path()) break;
+            current = current.parent_path();
+        }
+    }
+
+    // 3. Walk up from cwd
     auto current = fs::current_path();
     while (!current.empty()) {
         if (fs::exists(current / "core" / "include" / "xpresspp" / "xpresspp.h") &&
@@ -149,6 +191,21 @@ fs::path repoRoot() {
         }
         if (current == current.root_path()) break;
         current = current.parent_path();
+    }
+
+    // 4. Try typical locations relative to home directory
+    if (const char* home = std::getenv("HOME")) {
+        std::vector<fs::path> search_paths = {
+            fs::path(home) / "Desktop" / "xpress++",
+            fs::path(home) / "xpress++",
+            fs::path(home) / ".xpresspp"
+        };
+        for (const auto& path : search_paths) {
+            if (fs::exists(path / "core" / "include" / "xpresspp" / "xpresspp.h") &&
+                fs::exists(path / "templates" / "default_app")) {
+                return path;
+            }
+        }
     }
 
     return fs::current_path();

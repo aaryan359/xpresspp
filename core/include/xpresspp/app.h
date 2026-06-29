@@ -498,19 +498,26 @@ public:
     App() {
         drogon::app().registerBeginningAdvice([]() {
             bool is_rollback = false;
+            bool is_migrate = false;
             std::ifstream cmdline("/proc/self/cmdline");
             if (cmdline.is_open()) {
                 std::string arg;
                 while (std::getline(cmdline, arg, '\0')) {
                     if (arg == "--rollback" || arg == "-r") {
                         is_rollback = true;
-                        break;
+                    } else if (arg == "--migrate" || arg == "-m") {
+                        is_migrate = true;
                     }
                 }
             }
             if (const char* env = std::getenv("XP_ROLLBACK")) {
                 if (std::string(env) == "true" || std::string(env) == "1") {
                     is_rollback = true;
+                }
+            }
+            if (const char* env = std::getenv("XP_MIGRATE")) {
+                if (std::string(env) == "true" || std::string(env) == "1") {
+                    is_migrate = true;
                 }
             }
 
@@ -525,6 +532,17 @@ public:
                     }
                 };
                 do_rollback();
+            } else if (is_migrate) {
+                auto do_migrate = []() -> drogon::AsyncTask {
+                    try {
+                        co_await xp::DatabaseManager::instance().runSync();
+                        std::exit(0);
+                    } catch (const std::exception& e) {
+                        std::cerr << "[Xpress++ Migration Error] " << e.what() << std::endl;
+                        std::exit(1);
+                    }
+                };
+                do_migrate();
             }
         });
 
@@ -869,12 +887,32 @@ public:
         return is_rollback;
     }
 
+    bool isMigrateRequested() const {
+        bool is_migrate = false;
+        std::ifstream cmdline("/proc/self/cmdline");
+        if (cmdline.is_open()) {
+            std::string arg;
+            while (std::getline(cmdline, arg, '\0')) {
+                if (arg == "--migrate" || arg == "-m") {
+                    is_migrate = true;
+                    break;
+                }
+            }
+        }
+        if (const char* env = std::getenv("XP_MIGRATE")) {
+            if (std::string(env) == "true" || std::string(env) == "1") {
+                is_migrate = true;
+            }
+        }
+        return is_migrate;
+    }
+
     void listen(int port) {
         listen("0.0.0.0", port);
     }
 
     void listen(const std::string& host, int port) {
-        if (isRollbackRequested()) {
+        if (isRollbackRequested() || isMigrateRequested()) {
             drogon::app().run();
             return;
         }
@@ -909,7 +947,7 @@ public:
                    int                port,
                    const std::string& cert_file,
                    const std::string& key_file) {
-        if (isRollbackRequested()) {
+        if (isRollbackRequested() || isMigrateRequested()) {
             drogon::app().run();
             return;
         }

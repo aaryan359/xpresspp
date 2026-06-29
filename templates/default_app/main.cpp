@@ -26,6 +26,7 @@ int main() {
             };
             auto users = await xpd.user.findMany(query);
             res.ok(users);
+            
         } catch (const std::exception& e) {
             res.serverError(e.what());
         }
@@ -41,7 +42,7 @@ int main() {
                 co_return;
             }
             await xpd.user.create(body);
-            
+
             res.created({{"success", true}});
         } catch (const std::exception& e) {
             res.serverError(e.what());

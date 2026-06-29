@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <algorithm>
 #include <sstream>
+#include <functional>
 #include "utils.h"
 
 namespace xp {
@@ -669,12 +670,25 @@ public:
 class DatabaseManager {
 private:
     std::unique_ptr<IDatabaseDriver> active_driver_;
+    std::function<drogon::Task<void>()> sync_callback_ = nullptr;
     DatabaseManager() = default;
 
 public:
     static DatabaseManager& instance() {
         static DatabaseManager inst;
         return inst;
+    }
+
+    void registerSync(std::function<drogon::Task<void>()> cb) {
+        sync_callback_ = std::move(cb);
+    }
+
+    drogon::Task<void> runSync() {
+        if (sync_callback_) {
+            co_await sync_callback_();
+        } else {
+            co_await runMigrations();
+        }
     }
 
     void connect(const std::string& connection_url) {

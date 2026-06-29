@@ -1439,12 +1439,41 @@ int migrate(const std::string& arg1, const std::string& arg2) {
     }
     dbOut << "        co_return;\n";
     dbOut << "    }\n";
+    dbOut << "};\n\n";
+    dbOut << "struct AutoSyncRegister {\n";
+    dbOut << "    AutoSyncRegister() {\n";
+    dbOut << "        xp::DatabaseManager::instance().registerSync([]() -> drogon::Task<void> {\n";
+    dbOut << "            co_await SchemaSync::syncAll();\n";
+    dbOut << "        });\n";
+    dbOut << "    }\n";
     dbOut << "};\n";
+    dbOut << "inline AutoSyncRegister auto_sync_register_instance;\n";
 
+    dbOut.close();
     success("Generated unified Xpress++ DB client in build/generated/db.h");
     divider();
-    success("Migration structures generated successfully! You can now use 'xpd' in your controllers and SchemaSync::syncAll() in your DB configuration.");
-    return 0;
+
+    info("Rebuilding and running database migrations...");
+    if (build(false) != 0) {
+        error("Failed to build the project for migrations.");
+        return 1;
+    }
+
+    const auto binary = projectBinary();
+    if (binary.empty()) {
+        error("No executable found in ./build for migrations.");
+        return 1;
+    }
+
+    info("Running migrations: " + binary + " --migrate");
+    divider();
+    int rc = runCommand(binary + " --migrate");
+    if (rc == 0) {
+        success("Database migrations applied successfully!");
+    } else {
+        error("Failed to apply database migrations.");
+    }
+    return rc;
 }
 
 static std::string detectProjectName() {

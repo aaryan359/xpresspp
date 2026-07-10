@@ -24,6 +24,7 @@
 #include "middleware/security.h"
 #include "middleware/session.h"
 #include "middleware/validation.h"
+#include "middleware/response_time.h"
 
 #if __has_include("db.h")
 #include "db.h"
@@ -32,6 +33,5 @@
 // Express-like coroutine syntax sugar macros
 #define await co_await
 #define async -> ::xp::Task<void>
-
 
 

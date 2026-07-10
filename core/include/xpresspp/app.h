@@ -159,6 +159,7 @@ class App {
 private:
     Router                    router_;
     std::vector<Middleware>   middleware_;
+    std::vector<AsyncMiddleware> async_middleware_;
     std::vector<AfterHandler> after_handlers_;
     ErrorHandler              error_handler_;
     Handler                   not_found_handler_;
@@ -284,6 +285,48 @@ public:
     }
 
 private:
+    Task<void> runAsyncMiddlewareStack(
+        std::size_t index,
+        std::shared_ptr<RequestContext> ctx,
+        const std::function<void(std::shared_ptr<RequestContext>&)>& final_handler) {
+        if (index >= async_middleware_.size()) {
+            runMiddlewareStack(middleware_, 0, ctx, final_handler);
+            co_return;
+        }
+
+        bool next_called = false;
+        AsyncNext next = [this, index, ctx, final_handler, &next_called]() -> Task<void> {
+            next_called = true;
+            co_await runAsyncMiddlewareStack(index + 1, ctx, final_handler);
+        };
+
+        try {
+            co_await async_middleware_[index](ctx->req, ctx->res, std::move(next));
+        } catch (const std::exception& error) {
+            handleError(error, ctx->req, ctx->res);
+            ctx->finish();
+            co_return;
+        } catch (...) {
+            InternalError unknown("An unknown C++ exception escaped asynchronous middleware.");
+            handleError(unknown, ctx->req, ctx->res);
+            ctx->finish();
+            co_return;
+        }
+
+        if (!next_called && !ctx->finished) {
+            if (!ctx->res.sent()) {
+                InternalError wrapped(
+                    "Asynchronous middleware at index " + std::to_string(index) +
+                    " finished without awaiting next() or sending a response.",
+                    "Every async middleware must either co_await next() or send a response."
+                );
+                handleError(wrapped, ctx->req, ctx->res);
+            }
+            ctx->finish();
+        }
+        co_return;
+    }
+
     void runMiddlewareStack(const std::vector<Middleware>& stack,
                             std::size_t                    index,
                             std::shared_ptr<RequestContext> ctx,
@@ -429,7 +472,17 @@ public:
                 runMiddlewareStack(route.middleware, 0, f_ctx, final_route_call);
             };
 
-            runMiddlewareStack(middleware_, 0, ctx, final_handler);
+            if (async_middleware_.empty()) {
+                runMiddlewareStack(middleware_, 0, ctx, final_handler);
+            } else {
+                drogon::app().getLoop()->queueInLoop(
+                    drogon::async_func([this, ctx, final_handler]() -> drogon::Task<void> {
+                        current_request_context = ctx;
+                        co_await runAsyncMiddlewareStack(0, ctx, final_handler);
+                        current_request_context = nullptr;
+                    })
+                );
+            }
 
         } catch (const std::exception& error) {
             handleError(error, ctx->req, ctx->res);
@@ -713,6 +766,11 @@ public:
 
     App& use(Middleware middleware) {
         middleware_.push_back(std::move(middleware));
+        return *this;
+    }
+
+    App& use(AsyncMiddleware middleware) {
+        async_middleware_.push_back(std::move(middleware));
         return *this;
     }
 

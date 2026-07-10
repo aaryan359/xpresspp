@@ -24,6 +24,8 @@ using CoroHandler = std::function<Task<void>(Request&, Response&)>;
 using Handler = std::variant<SyncHandler, CoroHandler>;
 using Next = std::function<void()>;
 using Middleware = std::function<void(Request&, Response&, Next)>;
+using AsyncNext = std::function<Task<void>()>;
+using AsyncMiddleware = std::function<Task<void>(Request&, Response&, AsyncNext)>;
 
 struct RouteMatch {
     bool matched = false;

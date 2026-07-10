@@ -56,8 +56,9 @@ struct RequestContext {
 
     RequestContext(const drogon::HttpRequestPtr& native_req,
                    std::vector<AfterHandler> handlers,
-                   std::function<void(const drogon::HttpResponsePtr&)> cb)
-        : req(native_req), after_handlers(std::move(handlers)), callback(std::move(cb)) {}
+                   std::function<void(const drogon::HttpResponsePtr&)> cb,
+                   bool trust_proxy = false)
+        : req(native_req, trust_proxy), after_handlers(std::move(handlers)), callback(std::move(cb)) {}
 
     void finish() {
         if (finished) return;
@@ -84,6 +85,7 @@ struct AppConfig {
     bool        gzip              = false;
     bool        sendfile          = true;
     bool        showBanner        = true;   // print startup banner
+    bool        trustProxy        = false;  // trust forwarding headers only behind a configured proxy
     std::size_t maxBodySize       = 1024 * 1024;
     std::size_t threads           = 0;
 };
@@ -331,7 +333,8 @@ public:
                        std::function<void(const drogon::HttpResponsePtr&)>&& callback) {
         std::shared_ptr<RequestContext> ctx;
         try {
-            ctx = std::make_shared<RequestContext>(native_req, after_handlers_, std::move(callback));
+            ctx = std::make_shared<RequestContext>(native_req, after_handlers_, std::move(callback),
+                                                   config_.trustProxy);
         } catch (const std::exception& e) {
             throw;
         }

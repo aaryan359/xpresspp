@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <any>
 #include <cctype>
+#include <filesystem>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -23,6 +24,7 @@ class Request {
 private:
     drogon::HttpRequestPtr native_request_;
     std::unordered_map<std::string, std::string> params_;
+    bool trust_proxy_ = false;
 
     ValidationResult validateData(const xp::var& data, std::initializer_list<std::pair<std::string, ValidationRule>> rules) const {
         ValidationResult result;
@@ -118,7 +120,8 @@ private:
     }
 
 public:
-    explicit Request(drogon::HttpRequestPtr req) : native_request_(std::move(req)) {}
+    explicit Request(drogon::HttpRequestPtr req, bool trust_proxy = false)
+        : native_request_(std::move(req)), trust_proxy_(trust_proxy) {}
 
     std::string path() const {
         return native_request_->getPath();
@@ -249,12 +252,21 @@ public:
     }
 
     std::string ip() const {
+        if (trust_proxy_) {
+            const auto forwarded = header("x-forwarded-for");
+            if (!forwarded.empty()) {
+                const auto comma = forwarded.find(',');
+                return trim(forwarded.substr(0, comma));
+            }
+            const auto real_ip = header("x-real-ip");
+            if (!real_ip.empty()) return trim(real_ip);
+        }
         return native_request_->getPeerAddr().toIp();
     }
 
     std::vector<std::string> ips() const {
         std::vector<std::string> result;
-        const auto forwarded = header("x-forwarded-for");
+        const auto forwarded = trust_proxy_ ? header("x-forwarded-for") : "";
         if (!forwarded.empty()) {
             std::stringstream parts(forwarded);
             std::string part;
@@ -262,8 +274,24 @@ public:
                 result.push_back(trim(part));
             }
         }
-        result.push_back(ip());
+        result.push_back(native_request_->getPeerAddr().toIp());
         return result;
+    }
+
+    bool trustsProxy() const { return trust_proxy_; }
+
+    static std::string safeUploadName(const std::string& filename) {
+        auto name = std::filesystem::path(filename).filename().string();
+        std::string safe;
+        safe.reserve(name.size());
+        for (unsigned char c : name) {
+            if (std::isalnum(c) || c == '.' || c == '-' || c == '_') safe.push_back(static_cast<char>(c));
+            else safe.push_back('_');
+        }
+        if (safe.empty() || safe == "." || safe == "..") {
+            throw std::invalid_argument("Invalid upload filename.");
+        }
+        return safe;
     }
 
     std::string userAgent() const {

@@ -26,6 +26,7 @@
 #include <type_traits>
 #include <future>
 #include <mutex>
+#include <atomic>
 #include <condition_variable>
 
 #if defined(_WIN32)
@@ -168,6 +169,7 @@ private:
     Handler                   method_not_allowed_handler_;
     AppConfig                 config_;
     bool                      debug_ = true;
+    inline static std::atomic<bool> migration_failed{false};
 
     struct StaticMount {
         std::string          prefix;
@@ -594,10 +596,11 @@ public:
                 auto do_rollback = []() -> drogon::AsyncTask {
                     try {
                         co_await xp::DatabaseManager::instance().rollbackLastMigration();
-                        std::exit(0);
+                        drogon::app().quit();
                     } catch (const std::exception& e) {
                         std::cerr << "[Xpress++ Rollback Error] " << e.what() << std::endl;
-                        std::exit(1);
+                        migration_failed.store(true);
+                        drogon::app().quit();
                     }
                 };
                 do_rollback();
@@ -605,10 +608,11 @@ public:
                 auto do_migrate = []() -> drogon::AsyncTask {
                     try {
                         co_await xp::DatabaseManager::instance().runSync();
-                        std::exit(0);
+                        drogon::app().quit();
                     } catch (const std::exception& e) {
                         std::cerr << "[Xpress++ Migration Error] " << e.what() << std::endl;
-                        std::exit(1);
+                        migration_failed.store(true);
+                        drogon::app().quit();
                     }
                 };
                 do_migrate();
@@ -1026,7 +1030,11 @@ public:
                 }
             }
             drogon::app().run();
-            std::exit(0);
+            if (migration_failed.load()) {
+                std::exit(1);
+            } else {
+                std::exit(0);
+            }
         }
     }
 

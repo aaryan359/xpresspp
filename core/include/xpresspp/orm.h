@@ -27,6 +27,12 @@ public:
         auto schema = Derived::schema();
         co_await xp::DatabaseManager::instance().driver()->execute(tableName, schema, OpType::Create, data);
     }
+
+    static drogon::Task<void> create(drogon::orm::TransactionPtr tx, const Json::Value& data) {
+        std::string tableName = Derived::tableName();
+        auto schema = Derived::schema();
+        co_await xp::DatabaseManager::instance().driver()->executeTx(tx, tableName, schema, OpType::Create, data);
+    }
     
     // FIND UNIQUE / FIND FIRST: Get record matching options
     static drogon::Task<xp::var> findUnique(const Json::Value& query) {
@@ -34,10 +40,20 @@ public:
         auto schema = Derived::schema();
         co_return co_await xp::DatabaseManager::instance().driver()->execute(tableName, schema, OpType::FindUnique, query);
     }
+
+    static drogon::Task<xp::var> findUnique(drogon::orm::TransactionPtr tx, const Json::Value& query) {
+        std::string tableName = Derived::tableName();
+        auto schema = Derived::schema();
+        co_return co_await xp::DatabaseManager::instance().driver()->executeTx(tx, tableName, schema, OpType::FindUnique, query);
+    }
     
     // FIND ALL: Get all records in the table
     static drogon::Task<xp::var> findAll() {
         co_return co_await findMany();
+    }
+
+    static drogon::Task<xp::var> findAll(drogon::orm::TransactionPtr tx) {
+        co_return co_await findMany(tx);
     }
 
     // FIND MANY: Get all records matching options
@@ -45,6 +61,12 @@ public:
         std::string tableName = Derived::tableName();
         auto schema = Derived::schema();
         co_return co_await xp::DatabaseManager::instance().driver()->execute(tableName, schema, OpType::FindMany, query);
+    }
+
+    static drogon::Task<xp::var> findMany(drogon::orm::TransactionPtr tx, const Json::Value& query = Json::Value()) {
+        std::string tableName = Derived::tableName();
+        auto schema = Derived::schema();
+        co_return co_await xp::DatabaseManager::instance().driver()->executeTx(tx, tableName, schema, OpType::FindMany, query);
     }
     
     // UPDATE: Update records matching where with data
@@ -56,6 +78,15 @@ public:
         query["data"] = data;
         co_await xp::DatabaseManager::instance().driver()->execute(tableName, schema, OpType::Update, query);
     }
+
+    static drogon::Task<void> update(drogon::orm::TransactionPtr tx, const Json::Value& where, const Json::Value& data) {
+        std::string tableName = Derived::tableName();
+        auto schema = Derived::schema();
+        xp::var query;
+        query["where"] = where;
+        query["data"] = data;
+        co_await xp::DatabaseManager::instance().driver()->executeTx(tx, tableName, schema, OpType::Update, query);
+    }
     
     // DELETE MANY: Remove records matching where
     static drogon::Task<void> deleteMany(const Json::Value& where) {
@@ -64,6 +95,14 @@ public:
         xp::var query;
         query["where"] = where;
         co_await xp::DatabaseManager::instance().driver()->execute(tableName, schema, OpType::Delete, query);
+    }
+
+    static drogon::Task<void> deleteMany(drogon::orm::TransactionPtr tx, const Json::Value& where) {
+        std::string tableName = Derived::tableName();
+        auto schema = Derived::schema();
+        xp::var query;
+        query["where"] = where;
+        co_await xp::DatabaseManager::instance().driver()->executeTx(tx, tableName, schema, OpType::Delete, query);
     }
 };
 

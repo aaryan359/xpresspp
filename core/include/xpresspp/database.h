@@ -1,6 +1,7 @@
 #pragma once
 
 #include <drogon/drogon.h>
+#include <drogon/orm/DbClient.h>
 #include <json/json.h>
 #include <string>
 #include <vector>
@@ -13,6 +14,11 @@
 #include <sstream>
 #include <functional>
 #include "utils.h"
+
+namespace drogon::orm {
+    class Transaction;
+    using TransactionPtr = std::shared_ptr<Transaction>;
+}
 
 namespace xp {
 
@@ -69,10 +75,18 @@ using QueryParam = std::variant<std::nullptr_t, bool, int32_t, int64_t, double, 
 inline QueryParam jsonToQueryParam(const Json::Value& val) {
     if (val.isNull()) return nullptr;
     if (val.isBool()) return val.asBool();
-    if (val.isInt()) return static_cast<int64_t>(val.asInt());
+    if (val.isInt()) return val.asInt();
     if (val.isInt64()) return val.asInt64();
-    if (val.isUInt()) return static_cast<int64_t>(val.asUInt());
-    if (val.isUInt64()) return static_cast<int64_t>(val.asUInt64());
+    if (val.isUInt()) {
+        auto u = val.asUInt();
+        if (u <= 2147483647U) return static_cast<int32_t>(u);
+        return static_cast<int64_t>(u);
+    }
+    if (val.isUInt64()) {
+        auto u = val.asUInt64();
+        if (u <= 2147483647ULL) return static_cast<int32_t>(u);
+        return static_cast<int64_t>(u);
+    }
     if (val.isDouble()) return val.asDouble();
     return val.asString();
 }
@@ -201,6 +215,13 @@ public:
         OpType op,
         const xp::var& query
     ) = 0;
+    virtual drogon::Task<xp::var> executeTx(
+        drogon::orm::TransactionPtr tx,
+        const std::string& model_name,
+        const Schema& schema,
+        OpType op,
+        const xp::var& query
+    ) = 0;
 };
 
 struct SqlQuery {
@@ -215,7 +236,10 @@ protected:
 
     std::string fieldTypeToSql(FieldType type) {
         switch (type) {
-            case FieldType::Serial:    return driver_name_ == "postgresql" ? "SERIAL" : "INTEGER PRIMARY KEY AUTOINCREMENT";
+            case FieldType::Serial:
+                if (driver_name_ == "postgresql") return "SERIAL";
+                if (driver_name_ == "mysql") return "BIGINT AUTO_INCREMENT";
+                return "INTEGER PRIMARY KEY AUTOINCREMENT";
             case FieldType::Integer:   return "BIGINT";
             case FieldType::Text:      return "VARCHAR(255)";
             case FieldType::Boolean:   return "BOOLEAN";
@@ -232,61 +256,78 @@ protected:
         std::string limit_clause = "";
         std::string offset_clause = "";
 
-        if (query.isMember("where") && query["where"].isObject()) {
-            const auto& where = query["where"];
-            int param_idx = 1;
-            for (auto it = where.begin(); it != where.end(); ++it) {
-                std::string field = it.name();
-                const auto& val = *it;
-
-                if (it != where.begin()) {
-                    where_clause += " AND ";
-                } else {
-                    where_clause += " WHERE ";
+        if (op != OpType::Update && op != OpType::Create) {
+            xp::var where;
+            bool has_where = false;
+            if (query.isMember("where") && query["where"].isObject()) {
+                where = query["where"];
+                has_where = true;
+            } else if (query.isObject() && !query.empty()) {
+                where = query;
+                where.removeMember("forUpdate");
+                where.removeMember("take");
+                where.removeMember("skip");
+                where.removeMember("orderBy");
+                if (!where.empty()) {
+                    has_where = true;
                 }
+            }
 
-                if (val.isObject()) {
-                    bool first_op = true;
-                    for (auto op_it = val.begin(); op_it != val.end(); ++op_it) {
-                        std::string op_name = op_it.name();
-                        const auto& op_val = *op_it;
+            if (has_where) {
+                int param_idx = 1;
+                for (auto it = where.begin(); it != where.end(); ++it) {
+                    std::string field = it.name();
+                    const auto& val = *it;
 
-                        if (!first_op) {
-                            where_clause += " AND ";
-                        }
-                        first_op = false;
-
-                        std::string sql_op = "=";
-                        if (op_name == "gt") sql_op = ">";
-                        else if (op_name == "gte") sql_op = ">=";
-                        else if (op_name == "lt") sql_op = "<";
-                        else if (op_name == "lte") sql_op = "<=";
-                        else if (op_name == "not") sql_op = "!=";
-                        else if (op_name == "contains") {
-                            sql_op = "LIKE";
-                            q.params.push_back("%" + op_val.asString() + "%");
-                            where_clause += field + " " + sql_op + " " + getPlaceholder(driver_name_, param_idx++);
-                            continue;
-                        }
-                        else if (op_name == "startsWith") {
-                            sql_op = "LIKE";
-                            q.params.push_back(op_val.asString() + "%");
-                            where_clause += field + " " + sql_op + " " + getPlaceholder(driver_name_, param_idx++);
-                            continue;
-                        }
-                        else if (op_name == "endsWith") {
-                            sql_op = "LIKE";
-                            q.params.push_back("%" + op_val.asString());
-                            where_clause += field + " " + sql_op + " " + getPlaceholder(driver_name_, param_idx++);
-                            continue;
-                        }
-
-                        where_clause += field + " " + sql_op + " " + getPlaceholder(driver_name_, param_idx++);
-                        q.params.push_back(jsonToQueryParam(op_val));
+                    if (it != where.begin()) {
+                        where_clause += " AND ";
+                    } else {
+                        where_clause += " WHERE ";
                     }
-                } else {
-                    where_clause += field + " = " + getPlaceholder(driver_name_, param_idx++);
-                    q.params.push_back(jsonToQueryParam(val));
+
+                    if (val.isObject()) {
+                        bool first_op = true;
+                        for (auto op_it = val.begin(); op_it != val.end(); ++op_it) {
+                            std::string op_name = op_it.name();
+                            const auto& op_val = *op_it;
+
+                            if (!first_op) {
+                                where_clause += " AND ";
+                            }
+                            first_op = false;
+
+                            std::string sql_op = "=";
+                            if (op_name == "gt") sql_op = ">";
+                            else if (op_name == "gte") sql_op = ">=";
+                            else if (op_name == "lt") sql_op = "<";
+                            else if (op_name == "lte") sql_op = "<=";
+                            else if (op_name == "not") sql_op = "!=";
+                            else if (op_name == "contains") {
+                                sql_op = "LIKE";
+                                q.params.push_back("%" + op_val.asString() + "%");
+                                where_clause += field + " " + sql_op + " " + getPlaceholder(driver_name_, param_idx++);
+                                continue;
+                            }
+                            else if (op_name == "startsWith") {
+                                sql_op = "LIKE";
+                                q.params.push_back(op_val.asString() + "%");
+                                where_clause += field + " " + sql_op + " " + getPlaceholder(driver_name_, param_idx++);
+                                continue;
+                            }
+                            else if (op_name == "endsWith") {
+                                sql_op = "LIKE";
+                                q.params.push_back("%" + op_val.asString());
+                                where_clause += field + " " + sql_op + " " + getPlaceholder(driver_name_, param_idx++);
+                                continue;
+                            }
+
+                            where_clause += field + " " + sql_op + " " + getPlaceholder(driver_name_, param_idx++);
+                            q.params.push_back(jsonToQueryParam(op_val));
+                        }
+                    } else {
+                        where_clause += field + " = " + getPlaceholder(driver_name_, param_idx++);
+                        q.params.push_back(jsonToQueryParam(val));
+                    }
                 }
             }
         }
@@ -312,6 +353,9 @@ protected:
             q.sql = "SELECT * FROM " + table_name + where_clause + order_clause + limit_clause + offset_clause;
             if (op == OpType::FindUnique) {
                 q.sql += " LIMIT 1";
+            }
+            if (query.isMember("forUpdate") && query["forUpdate"].asBool() && driver_name_ == "postgresql") {
+                q.sql += " FOR UPDATE";
             }
         } else if (op == OpType::Delete) {
             q.sql = "DELETE FROM " + table_name + where_clause;
@@ -383,6 +427,9 @@ public:
         std::string check_sql = "";
         if (driver_name_ == "postgresql") {
             check_sql = "SELECT column_name FROM information_schema.columns WHERE table_name = '" + model_name + "';";
+        } else if (driver_name_ == "mysql") {
+            check_sql = "SELECT COLUMN_NAME AS column_name FROM information_schema.columns "
+                        "WHERE table_schema = DATABASE() AND table_name = '" + model_name + "';";
         } else if (driver_name_ == "sqlite3") {
             check_sql = "PRAGMA table_info(" + model_name + ");";
         }
@@ -395,7 +442,7 @@ public:
             if (!result.empty()) {
                 table_exists = true;
                 for (const auto& row : result) {
-                    if (driver_name_ == "postgresql") {
+                    if (driver_name_ == "postgresql" || driver_name_ == "mysql") {
                         existing_cols.push_back(row["column_name"].as<std::string>());
                     } else if (driver_name_ == "sqlite3") {
                         existing_cols.push_back(row["name"].as<std::string>());
@@ -433,7 +480,11 @@ public:
             for (const auto& field : schema) {
                 bool found = false;
                 for (const auto& col : existing_cols) {
-                    if (col == field.name) {
+                    std::string col_lower = col;
+                    std::string field_lower = field.name;
+                    std::transform(col_lower.begin(), col_lower.end(), col_lower.begin(), ::tolower);
+                    std::transform(field_lower.begin(), field_lower.end(), field_lower.begin(), ::tolower);
+                    if (col_lower == field_lower) {
                         found = true;
                         break;
                     }
@@ -484,6 +535,32 @@ public:
 
         co_return xp::var();
     }
+
+    drogon::Task<xp::var> executeTx(
+        drogon::orm::TransactionPtr tx,
+        const std::string& model_name,
+        const Schema& schema,
+        OpType op,
+        const xp::var& query
+    ) override {
+        if (!tx) {
+            throw std::runtime_error("Transaction is null.");
+        }
+
+        SqlQuery q = compileSqlQuery(model_name, op, query);
+        auto result = co_await executeParameterized(tx, q.sql, q.params);
+
+        if (op == OpType::FindUnique) {
+            if (result.empty()) {
+                co_return xp::var();
+            }
+            co_return rowToJson(result, result[0]);
+        } else if (op == OpType::FindMany) {
+            co_return resultToJson(result);
+        }
+
+        co_return xp::var();
+    }
 };
 
 class PostgreSqlDriver : public BaseSqlDriver {
@@ -494,6 +571,11 @@ public:
 class SqliteDriver : public BaseSqlDriver {
 public:
     SqliteDriver() : BaseSqlDriver("sqlite3") {}
+};
+
+class MySqlDriver : public BaseSqlDriver {
+public:
+    MySqlDriver() : BaseSqlDriver("mysql") {}
 };
 
 #if __has_include(<mongocxx/client.hpp>)
@@ -651,6 +733,17 @@ public:
 
         co_return xp::var();
     }
+
+    drogon::Task<xp::var> executeTx(
+        drogon::orm::TransactionPtr,
+        const std::string&,
+        const Schema&,
+        OpType,
+        const xp::var&
+    ) override {
+        throw std::runtime_error("Transactions are not supported on MongoDB in Xpress++ yet.");
+        co_return xp::var();
+    }
 };
 #else
 class MongoDbDriver : public IDatabaseDriver {
@@ -661,6 +754,10 @@ public:
     void disconnect() override {}
     drogon::Task<void> syncSchema(const std::string&, const Schema&) override { co_return; }
     drogon::Task<xp::var> execute(const std::string&, const Schema&, OpType, const xp::var&) override {
+        throw std::runtime_error("MongoDB driver is not installed.");
+        co_return xp::var();
+    }
+    drogon::Task<xp::var> executeTx(drogon::orm::TransactionPtr, const std::string&, const Schema&, OpType, const xp::var&) override {
         throw std::runtime_error("MongoDB driver is not installed.");
         co_return xp::var();
     }
@@ -698,6 +795,8 @@ public:
     void connect(const std::string& connection_url) {
         if (connection_url.rfind("postgresql://", 0) == 0 || connection_url.rfind("postgres://", 0) == 0) {
             active_driver_ = std::make_unique<PostgreSqlDriver>();
+        } else if (connection_url.rfind("mysql://", 0) == 0) {
+            active_driver_ = std::make_unique<MySqlDriver>();
         } else if (connection_url.rfind("mongodb://", 0) == 0 || connection_url.rfind("mongodb+srv://", 0) == 0) {
             active_driver_ = std::make_unique<MongoDbDriver>();
         } else if (connection_url.rfind("sqlite://", 0) == 0 || connection_url.rfind("sqlite3://", 0) == 0) {
@@ -711,6 +810,8 @@ public:
     void connect(const DbConfig& config) {
         if (config.driver == "postgresql" || config.driver == "postgres") {
             active_driver_ = std::make_unique<PostgreSqlDriver>();
+        } else if (config.driver == "mysql") {
+            active_driver_ = std::make_unique<MySqlDriver>();
         } else if (config.driver == "mongodb") {
             active_driver_ = std::make_unique<MongoDbDriver>();
         } else if (config.driver == "sqlite3" || config.driver == "sqlite") {
@@ -726,6 +827,14 @@ public:
             throw std::runtime_error("Database is not connected. Call app.database() first.");
         }
         return active_driver_.get();
+    }
+
+    drogon::Task<drogon::orm::TransactionPtr> newTransaction() {
+        auto client = drogon::app().getDbClient("default");
+        if (!client) {
+            throw std::runtime_error("Database is not connected. Call app.database() first.");
+        }
+        co_return co_await client->newTransactionCoro();
     }
 
     static std::string trim(std::string str) {

@@ -1422,6 +1422,51 @@ int migrate(const std::string& arg1, const std::string& arg2) {
         dbOut << "    " << model.name << "Client " << camelName << ";\n";
     }
     dbOut << "};\n\n";
+
+    // 3b. Write the TxClient struct and beginTransaction function
+    dbOut << "struct TxClient {\n";
+    dbOut << "    drogon::orm::TransactionPtr tx;\n\n";
+    dbOut << "    drogon::Task<void> commit() { co_await tx->commitAsync(); }\n";
+    dbOut << "    drogon::Task<void> rollback() { co_await tx->rollbackAsync(); }\n\n";
+    for (const auto& model : models) {
+        std::string camelName = model.name;
+        if (!camelName.empty()) camelName[0] = std::tolower(camelName[0]);
+
+        dbOut << "    struct " << model.name << "ClientTx {\n";
+        dbOut << "        drogon::orm::TransactionPtr tx;\n";
+        dbOut << "        drogon::Task<void> create(const Json::Value& data) const { co_await ::" << model.name << "::create(tx, data); }\n";
+        dbOut << "        drogon::Task<xp::var> findUnique(const Json::Value& query) const { co_return co_await ::" << model.name << "::findUnique(tx, query); }\n";
+        dbOut << "        drogon::Task<xp::var> findMany(const Json::Value& query = Json::Value()) const { co_return co_await ::" << model.name << "::findMany(tx, query); }\n";
+        dbOut << "        drogon::Task<void> update(const Json::Value& where, const Json::Value& data) const { co_await ::" << model.name << "::update(tx, where, data); }\n";
+        dbOut << "        drogon::Task<void> deleteMany(const Json::Value& where) const { co_await ::" << model.name << "::deleteMany(tx, where); }\n";
+
+        for (const auto& f : model.fields) {
+            if (f.isRelation) continue;
+            if (f.isUnique || f.isPrimaryKey) {
+                std::string capName = f.name;
+                if (!capName.empty()) capName[0] = std::toupper(capName[0]);
+
+                std::string paramType = "const std::string&";
+                if (f.type == "Serial" || f.type == "Int") paramType = "int64_t";
+                else if (f.type == "Float") paramType = "double";
+                else if (f.type == "Boolean") paramType = "bool";
+
+                dbOut << "        drogon::Task<Json::Value> findBy" << capName << "(" << paramType << " val) const {\n";
+                dbOut << "            Json::Value where;\n";
+                dbOut << "            where[\"" << f.name << "\"] = val;\n";
+                dbOut << "            co_return co_await ::" << model.name << "::findUnique(tx, where);\n";
+                dbOut << "        }\n";
+            }
+        }
+        dbOut << "    } " << camelName << "{tx};\n\n";
+    }
+    dbOut << "};\n\n";
+
+    dbOut << "inline drogon::Task<TxClient> beginTransaction() {\n";
+    dbOut << "    auto tx = co_await xp::DatabaseManager::instance().newTransaction();\n";
+    dbOut << "    co_return TxClient{tx};\n";
+    dbOut << "}\n\n";
+
     dbOut << "inline constexpr XpdClient xpd{};\n\n";
 
     // 4. Write SchemaSync inside db.h

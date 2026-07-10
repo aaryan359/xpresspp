@@ -1,0 +1,2 @@
+ALTER TABLE users DROP COLUMN role;
+DROP TABLE IF EXISTS posts;

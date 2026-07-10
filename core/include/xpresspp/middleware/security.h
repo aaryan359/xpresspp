@@ -12,9 +12,14 @@ struct SecurityHeadersOptions {
     bool referrerPolicy = true;
     bool xssProtection = true;
     bool hsts = false;
+    bool permissionsPolicy = true;
+    bool crossOriginOpenerPolicy = true;
     std::string frameOptionsValue = "DENY";
     std::string referrerPolicyValue = "no-referrer";
     std::string hstsValue = "max-age=15552000; includeSubDomains";
+    std::string contentSecurityPolicy;
+    std::string permissionsPolicyValue = "camera=(), microphone=(), geolocation=()";
+    std::string crossOriginOpenerPolicyValue = "same-origin";
 };
 
 inline Middleware securityHeaders(SecurityHeadersOptions options = {}) {
@@ -34,6 +39,15 @@ inline Middleware securityHeaders(SecurityHeadersOptions options = {}) {
         }
         if (options.hsts) {
             res.header("Strict-Transport-Security", options.hstsValue);
+        }
+        if (!options.contentSecurityPolicy.empty()) {
+            res.header("Content-Security-Policy", options.contentSecurityPolicy);
+        }
+        if (options.permissionsPolicy) {
+            res.header("Permissions-Policy", options.permissionsPolicyValue);
+        }
+        if (options.crossOriginOpenerPolicy) {
+            res.header("Cross-Origin-Opener-Policy", options.crossOriginOpenerPolicyValue);
         }
         next();
     };

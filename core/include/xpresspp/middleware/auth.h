@@ -11,12 +11,20 @@
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/buffer.h>
+#include <openssl/crypto.h>
 #include <json/json.h>
 
 namespace xp {
 
 using ApiKeyVerifier = std::function<bool(const std::string&)>;
 using BasicAuthVerifier = std::function<bool(const std::string&, const std::string&)>;
+
+struct JwtVerifyOptions {
+    std::string issuer;
+    std::string audience;
+    int clockSkewSeconds = 30;
+    bool requireExpiration = true;
+};
 
 // Helper functions for JWT (Base64 encoding/decoding and signing)
 namespace detail {
@@ -89,6 +97,19 @@ inline std::string hmac_sha256(const std::string& secret, const std::string& dat
     return std::string(reinterpret_cast<char*>(hash), len);
 }
 
+inline bool constantTimeEqual(const std::string& left, const std::string& right) {
+    return left.size() == right.size() &&
+           CRYPTO_memcmp(left.data(), right.data(), left.size()) == 0;
+}
+
+inline bool parseEncodedJson(const std::string& encoded, Json::Value& value) {
+    const std::string decoded = base64_url_decode(encoded);
+    Json::CharReaderBuilder builder;
+    std::string errors;
+    auto reader = std::unique_ptr<Json::CharReader>(builder.newCharReader());
+    return reader->parse(decoded.data(), decoded.data() + decoded.size(), &value, &errors);
+}
+
 } // namespace detail
 
 // ── Public JWT Utility API ───────────────────────────────────
@@ -130,44 +151,58 @@ inline std::string generateJwt(const std::string& username,
     return generateJwt(claims, secret, ttlSeconds);
 }
 
-// Verify a JWT token. Returns false if invalid, tampered, or expired.
-// Populates `username` from the "username" or "sub" claim on success.
-inline bool verifyJwt(const std::string& token,
-                      const std::string& secret,
-                      std::string&       username) {
+inline Json::Value decodeJwt(const std::string& token,
+                             const std::string& secret,
+                             const JwtVerifyOptions& options) {
     const auto dot1 = token.find('.');
-    if (dot1 == std::string::npos) return false;
+    if (dot1 == std::string::npos) return {};
     const auto dot2 = token.find('.', dot1 + 1);
-    if (dot2 == std::string::npos) return false;
+    if (dot2 == std::string::npos || token.find('.', dot2 + 1) != std::string::npos) return {};
 
     const std::string encoded_header  = token.substr(0, dot1);
     const std::string encoded_payload = token.substr(dot1 + 1, dot2 - dot1 - 1);
     const std::string signature       = token.substr(dot2 + 1);
 
+    Json::Value header;
+    if (!detail::parseEncodedJson(encoded_header, header) ||
+        !header.isObject() || header["alg"].asString() != "HS256" ||
+        header["typ"].asString() != "JWT") return {};
+
     const std::string sig_input          = encoded_header + "." + encoded_payload;
     const std::string expected_signature = detail::base64_url_encode(
         detail::hmac_sha256(secret, sig_input));
-    if (signature != expected_signature) return false;
+    if (!detail::constantTimeEqual(signature, expected_signature)) return {};
 
-    // Parse payload JSON
-    const std::string payload_str = detail::base64_url_decode(encoded_payload);
     Json::Value payload;
-    Json::CharReaderBuilder rb;
-    std::string errs;
-    std::unique_ptr<Json::CharReader> reader(rb.newCharReader());
-    if (!reader->parse(payload_str.data(),
-                       payload_str.data() + payload_str.size(),
-                       &payload, &errs)) {
-        return false;
-    }
+    if (!detail::parseEncodedJson(encoded_payload, payload) || !payload.isObject()) return {};
 
-    // Check expiry
+    const auto now = std::time(nullptr);
+    if (options.requireExpiration &&
+        (!payload.isMember("exp") || !payload["exp"].isIntegral())) return {};
     if (payload.isMember("exp") && payload["exp"].isIntegral()) {
         const auto exp = static_cast<std::time_t>(payload["exp"].asInt64());
-        if (std::time(nullptr) > exp) return false;
+        if (now > exp + options.clockSkewSeconds) return {};
     }
+    if (payload.isMember("nbf") && payload["nbf"].isIntegral() &&
+        now + options.clockSkewSeconds < payload["nbf"].asInt64()) return {};
+    if (!options.issuer.empty() && payload["iss"].asString() != options.issuer) return {};
+    if (!options.audience.empty() && payload["aud"].asString() != options.audience) return {};
 
-    // Extract username
+    return payload;
+}
+
+inline Json::Value decodeJwt(const std::string& token, const std::string& secret) {
+    return decodeJwt(token, secret, JwtVerifyOptions{});
+}
+
+// Verify a JWT token. Returns false if invalid, tampered, or expired.
+inline bool verifyJwt(const std::string& token,
+                      const std::string& secret,
+                      std::string& username,
+                      const JwtVerifyOptions& options = {}) {
+    const auto payload = decodeJwt(token, secret, options);
+    if (!payload.isObject()) return false;
+
     if (payload.isMember("username") && payload["username"].isString()) {
         username = payload["username"].asString();
     } else if (payload.isMember("sub") && payload["sub"].isString()) {
@@ -179,51 +214,17 @@ inline bool verifyJwt(const std::string& token,
     return true;
 }
 
-// Decode and return the full verified claims object.
-// Returns Json::Value() (null) on any failure (bad signature, expired, etc.).
-inline Json::Value decodeJwt(const std::string& token, const std::string& secret) {
-    const auto dot1 = token.find('.');
-    if (dot1 == std::string::npos) return {};
-    const auto dot2 = token.find('.', dot1 + 1);
-    if (dot2 == std::string::npos) return {};
-
-    const std::string encoded_header  = token.substr(0, dot1);
-    const std::string encoded_payload = token.substr(dot1 + 1, dot2 - dot1 - 1);
-    const std::string signature       = token.substr(dot2 + 1);
-
-    const std::string sig_input          = encoded_header + "." + encoded_payload;
-    const std::string expected_signature = detail::base64_url_encode(
-        detail::hmac_sha256(secret, sig_input));
-    if (signature != expected_signature) return {};
-
-    const std::string payload_str = detail::base64_url_decode(encoded_payload);
-    Json::Value payload;
-    Json::CharReaderBuilder rb;
-    std::string errs;
-    std::unique_ptr<Json::CharReader> reader(rb.newCharReader());
-    if (!reader->parse(payload_str.data(),
-                       payload_str.data() + payload_str.size(),
-                       &payload, &errs)) {
-        return {};
-    }
-
-    if (payload.isMember("exp") && payload["exp"].isIntegral()) {
-        const auto exp = static_cast<std::time_t>(payload["exp"].asInt64());
-        if (std::time(nullptr) > exp) return {};
-    }
-
-    return payload;
-}
-
 // Built-in JWT Middleware
-inline Middleware jwtAuth(std::string secret) {
-    return [secret = std::move(secret)](Request& req, Response& res, Next next) {
+inline Middleware jwtAuth(std::string secret, JwtVerifyOptions options = {}) {
+    return [secret = std::move(secret), options = std::move(options)](Request& req, Response& res, Next next) {
         std::string auth_header = req.header("authorization");
         if (auth_header.rfind("Bearer ", 0) == 0) {
             std::string token = auth_header.substr(7);
             std::string username;
-            if (verifyJwt(token, secret, username)) {
+            if (verifyJwt(token, secret, username, options)) {
                 req.setParam("username", username);
+                req.locals["username"] = username;
+                req.locals["jwt"] = decodeJwt(token, secret, options);
                 next();
                 return;
             }

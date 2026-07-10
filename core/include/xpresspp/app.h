@@ -187,19 +187,26 @@ private:
             const auto path   = req.path();
 
             if (path.rfind(prefix, 0) != 0) continue;
+            if (prefix != "/" && path.size() > prefix.size() && path[prefix.size()] != '/') continue;
 
             std::string relative = path.substr(prefix.size());
             if (relative.empty() || relative == "/") {
                 relative = "/index.html";
             }
 
-            std::filesystem::path file_path = mount.directory / relative.substr(1);
+            std::error_code ec;
+            const auto root = std::filesystem::weakly_canonical(mount.directory, ec);
+            if (ec) continue;
+            auto file_path = std::filesystem::weakly_canonical(root / relative.substr(1), ec);
+            if (ec) continue;
+            const auto within_root = file_path.lexically_relative(root);
+            if (within_root.empty() || *within_root.begin() == "..") continue;
             if (std::filesystem::is_directory(file_path)) {
                 file_path /= "index.html";
             }
 
             if (!std::filesystem::exists(file_path) && mount.spa_fallback) {
-                file_path = mount.directory / "index.html";
+                file_path = root / "index.html";
             }
 
             if (!std::filesystem::exists(file_path) ||
@@ -248,9 +255,13 @@ public:
 
         Json::Value payload;
         payload["status"]  = "error";
-        payload["message"] = error.what();
+        payload["message"] = (!debug_ && status_code >= 500)
+            ? "Internal server error"
+            : error.what();
         payload["path"]    = req.path();
         payload["method"]  = req.method();
+        const auto request_id = req.header("x-request-id");
+        if (!request_id.empty()) payload["requestId"] = request_id;
 
         if (debug_) {
             if (!hint.empty()) {

@@ -1,0 +1,8 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(Drogon REQUIRED)
+find_dependency(Jsoncpp REQUIRED)
+find_dependency(OpenSSL REQUIRED)
+
+include("${CMAKE_CURRENT_LIST_DIR}/xpressppTargets.cmake")

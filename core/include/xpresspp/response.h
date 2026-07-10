@@ -74,6 +74,14 @@ public:
         return *this;
     }
 
+    Response& cacheControl(const std::string& value) { return header("Cache-Control", value); }
+    Response& noCache() { return cacheControl("no-store, max-age=0"); }
+    Response& vary(const std::string& value) { return header("Vary", value); }
+    Response& etag(const std::string& value) {
+        const bool quoted = value.size() >= 2 && value.front() == '"' && value.back() == '"';
+        return header("ETag", quoted ? value : ("\"" + value + "\""));
+    }
+
     Response& send(std::string text) {
         ensureNative();
         native_response_->setBody(std::move(text));

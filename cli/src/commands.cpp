@@ -843,6 +843,25 @@ int clean() {
     return 0;
 }
 
+int test() {
+    std::string reason;
+    if (!isXpressProject(&reason) && !fs::exists("tests/CMakeLists.txt")) {
+        error("No Xpress++ test project found.", reason,
+              "Add tests/CMakeLists.txt, then run xp test again.");
+        return 1;
+    }
+
+    const fs::path source = fs::exists("tests/CMakeLists.txt") ? fs::path("tests") : fs::path(".");
+    const fs::path output = fs::path("build") / "tests";
+    info("Configuring tests...");
+    if (runCommand("cmake -S \"" + source.string() + "\" -B \"" + output.string() +
+                   "\" -DCMAKE_BUILD_TYPE=Debug") != 0) return 1;
+    if (runCommand("cmake --build \"" + output.string() + "\" --parallel") != 0) return 1;
+    const int result = runCommand("ctest --test-dir \"" + output.string() + "\" --output-on-failure");
+    if (result == 0) success("All tests passed.");
+    return result;
+}
+
 // ============================================================
 //  Migrate Command (Xpress++ Database Schema Parser and Generator)
 // ============================================================

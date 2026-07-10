@@ -7,11 +7,11 @@
 #include <functional>
 #include <string>
 #include <unordered_map>
-#include <cassert>
 #include <mutex>
 #include <condition_variable>
-#include <iostream>
 #include <sstream>
+#include <chrono>
+#include <stdexcept>
 
 namespace xp {
 
@@ -21,6 +21,7 @@ private:
     drogon::HttpRequestPtr native_req_;
     int expected_status_ = -1;
     std::unordered_map<std::string, std::string> expected_headers_;
+    std::chrono::milliseconds timeout_{5000};
 
 public:
     TestRequestBuilder(App& app, const std::string& method, const std::string& path)
@@ -72,23 +73,22 @@ public:
         return *this;
     }
 
+    TestRequestBuilder& timeout(std::chrono::milliseconds value) {
+        timeout_ = value;
+        return *this;
+    }
+
     Response send(const std::string& body = "", const std::string& contentType = "application/json") {
-        std::cout << "[TestClient DEBUG] Entering send(string). body size = " << body.size() << std::endl;
-        try {
-            if (!body.empty()) {
-                native_req_->setBody(body);
-                native_req_->addHeader("content-type", contentType);
-                if (contentType == "application/json") {
-                    native_req_->setContentTypeCode(drogon::CT_APPLICATION_JSON);
-                } else if (contentType == "text/plain") {
-                    native_req_->setContentTypeCode(drogon::CT_TEXT_PLAIN);
-                } else if (contentType == "text/html") {
-                    native_req_->setContentTypeCode(drogon::CT_TEXT_HTML);
-                }
+        if (!body.empty()) {
+            native_req_->setBody(body);
+            native_req_->addHeader("content-type", contentType);
+            if (contentType == "application/json") {
+                native_req_->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+            } else if (contentType == "text/plain") {
+                native_req_->setContentTypeCode(drogon::CT_TEXT_PLAIN);
+            } else if (contentType == "text/html") {
+                native_req_->setContentTypeCode(drogon::CT_TEXT_HTML);
             }
-        } catch (const std::exception& e) {
-            std::cerr << "[TestClient DEBUG] Error preparing request: " << e.what() << std::endl;
-            throw;
         }
 
         std::mutex mtx;
@@ -96,59 +96,42 @@ public:
         bool done = false;
         drogon::HttpResponsePtr response_ptr;
 
-        std::cout << "[TestClient DEBUG] Injecting request..." << std::endl;
-        try {
-            app_.injectRequest(native_req_, [&](const drogon::HttpResponsePtr& res) {
-                std::cout << "[TestClient DEBUG] Callback received response!" << std::endl;
-                response_ptr = res;
-                std::lock_guard<std::mutex> lock(mtx);
-                done = true;
-                cv.notify_one();
-            });
-        } catch (const std::exception& e) {
-            std::cerr << "[TestClient DEBUG] Error during injectRequest call: " << e.what() << std::endl;
-            throw;
-        }
+        app_.injectRequest(native_req_, [&](const drogon::HttpResponsePtr& res) {
+            response_ptr = res;
+            std::lock_guard<std::mutex> lock(mtx);
+            done = true;
+            cv.notify_one();
+        });
 
-        std::cout << "[TestClient DEBUG] Waiting for condition variable..." << std::endl;
         std::unique_lock<std::mutex> lock(mtx);
-        cv.wait(lock, [&] { return done; });
-        std::cout << "[TestClient DEBUG] Wait finished. Constructing Response..." << std::endl;
+        if (!cv.wait_for(lock, timeout_, [&] { return done; })) {
+            throw std::runtime_error("Xpress++ test request timed out after " +
+                                     std::to_string(timeout_.count()) + "ms");
+        }
 
         Response res(response_ptr);
 
         if (expected_status_ != -1) {
             if (res.statusCode() != expected_status_) {
-                std::cerr << "[Test Failure] Expected status " << expected_status_
-                          << ", but got " << res.statusCode() << "\n";
+                throw std::runtime_error("Expected status " + std::to_string(expected_status_) +
+                                         ", got " + std::to_string(res.statusCode()));
             }
-            assert(res.statusCode() == expected_status_);
         }
 
         for (const auto& [key, value] : expected_headers_) {
             std::string actual = res.header(key);
             if (actual != value) {
-                std::cerr << "[Test Failure] Expected header '" << key << "' to be '" << value
-                          << "', but got '" << actual << "'\n";
+                throw std::runtime_error("Expected header '" + key + "' to be '" + value +
+                                         "', got '" + actual + "'");
             }
-            assert(actual == value);
         }
 
-        std::cout << "[TestClient DEBUG] Exiting send(string) successfully." << std::endl;
         return res;
     }
 
     Response send(const xp::var& jsonBody) {
-        std::cout << "[TestClient DEBUG] Entering send(var)" << std::endl;
         Json::StreamWriterBuilder builder;
-        std::string body;
-        try {
-            body = Json::writeString(builder, jsonBody);
-        } catch (const std::exception& e) {
-            std::cerr << "[TestClient DEBUG] Json::writeString failed: " << e.what() << std::endl;
-            throw;
-        }
-        std::cout << "[TestClient DEBUG] Serialized body: " << body << std::endl;
+        const auto body = Json::writeString(builder, jsonBody);
         return send(body, "application/json");
     }
 };

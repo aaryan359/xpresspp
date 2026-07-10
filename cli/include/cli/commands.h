@@ -15,5 +15,6 @@ int clean();
 int installDeps();
 int migrate(const std::string& arg1 = "", const std::string& arg2 = "");
 int dockerize();
+int test();
 
 } // namespace xp::cli

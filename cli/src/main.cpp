@@ -1,5 +1,6 @@
 #include "cli/common.h"
 #include "cli/commands.h"
+#include <iostream>
 #include <string>
 
 int main(int argc, char** argv) {
@@ -41,6 +42,11 @@ int main(int argc, char** argv) {
         return xp::cli::migrate(arg1, arg2);
     }
     if (command == "dockerize") return xp::cli::dockerize();
+    if (command == "test") return xp::cli::test();
+    if (command == "--version" || command == "version" || command == "-v") {
+        std::cout << "Xpress++ 0.1.0-alpha.0\n";
+        return 0;
+    }
     if (command == "watch")   return xp::cli::watch();
     if (command == "dev")     return xp::cli::watch();
     if (command == "clean")   return xp::cli::clean();

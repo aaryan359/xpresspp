@@ -46,6 +46,7 @@ class App;
 using ErrorHandler = std::function<void(const std::exception&, Request&, Response&)>;
 using AfterHandler = std::function<void(Request&, Response&)>;
 using RouterBuilder = std::function<void(Router&)>;
+using HealthCheck = std::function<bool()>;
 
 struct RequestContext {
     Request req;
@@ -161,6 +162,7 @@ private:
     std::vector<Middleware>   middleware_;
     std::vector<AsyncMiddleware> async_middleware_;
     std::vector<AfterHandler> after_handlers_;
+    std::vector<std::function<void()>> shutdown_handlers_;
     ErrorHandler              error_handler_;
     Handler                   not_found_handler_;
     Handler                   method_not_allowed_handler_;
@@ -876,6 +878,34 @@ public:
         return *this;
     }
 
+    App& onShutdown(std::function<void()> callback) {
+        shutdown_handlers_.push_back(std::move(callback));
+        return *this;
+    }
+
+    App& health(const std::string& path = "/health") {
+        return get(path, [](Request&, Response& res) {
+            res.ok({{"status", "ok"}});
+        });
+    }
+
+    App& ready(std::vector<HealthCheck> checks = {}, const std::string& path = "/ready") {
+        return get(path, [checks = std::move(checks)](Request&, Response& res) {
+            for (const auto& check : checks) {
+                try {
+                    if (!check()) {
+                        res.status(503).json({{"status", "not_ready"}});
+                        return;
+                    }
+                } catch (...) {
+                    res.status(503).json({{"status", "not_ready"}});
+                    return;
+                }
+            }
+            res.ok({{"status", "ready"}});
+        });
+    }
+
     App& staticFiles(const std::filesystem::path& directory,
                      const std::string&           prefix       = "/",
                      bool                         spa_fallback = false) {
@@ -1018,6 +1048,7 @@ public:
 
         try {
             fw.addListener(host, port).run();
+            for (const auto& handler : shutdown_handlers_) handler();
         } catch (const std::exception& e) {
             detail::printStartupError(
                 "Failed to start server on " + host + ":" + std::to_string(port),
@@ -1070,6 +1101,7 @@ public:
 
         try {
             fw.addListener(host, static_cast<uint16_t>(port), true, cert_file, key_file).run();
+            for (const auto& handler : shutdown_handlers_) handler();
         } catch (const std::exception& e) {
             detail::printStartupError(
                 "Failed to start TLS server on " + host + ":" + std::to_string(port),

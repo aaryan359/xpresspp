@@ -1,0 +1,50 @@
+name: framework-ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang cmake git libssl-dev libjsoncpp-dev zlib1g-dev uuid-dev libsqlite3-dev libpq-dev
+
+      - name: Select compiler
+        run: |
+          if [ "${{ matrix.compiler }}" = "clang" ]; then
+            echo "CC=clang" >> "$GITHUB_ENV"
+            echo "CXX=clang++" >> "$GITHUB_ENV"
+          else
+            echo "CC=gcc" >> "$GITHUB_ENV"
+            echo "CXX=g++" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build Drogon
+        run: |
+          git clone --depth 1 --recurse-submodules https://github.com/drogonframework/drogon /tmp/drogon
+          cmake -S /tmp/drogon -B /tmp/drogon-build -DCMAKE_BUILD_TYPE=Release -DBUILD_EXAMPLES=OFF -DBUILD_CTL=OFF
+          cmake --build /tmp/drogon-build --parallel 2
+          sudo cmake --install /tmp/drogon-build
+
+      - name: Build and test framework
+        run: |
+          cmake -S . -B out -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
+          cmake --build out --parallel 2
+          ctest --test-dir out --output-on-failure
+
+      - name: Build CLI
+        run: |
+          cmake -S cli -B cli/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build cli/build --parallel 2
+          ./cli/build/xp --version

@@ -15,6 +15,7 @@
 #include "test.h"
 #include "websocket.h"
 #include "cache.h"
+#include "version.h"
 #include "middleware/cors.h"
 #include "middleware/rate_limit.h"
 #include "middleware/auth.h"
@@ -33,5 +34,4 @@
 // Express-like coroutine syntax sugar macros
 #define await co_await
 #define async -> ::xp::Task<void>
-
 

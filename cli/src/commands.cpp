@@ -4,6 +4,8 @@
 #include <iostream>
 #include <fstream>
 #include <unordered_map>
+#include <map>
+#include <set>
 #include <chrono>
 #include <thread>
 #include <sstream>
@@ -758,7 +760,10 @@ int installDeps() {
 
     if (hasApt) {
         info("Using apt-get (Ubuntu/Debian)...");
-        std::system("sudo apt-get update -qq");
+        const int update_rc = std::system("sudo apt-get update -qq");
+        if (update_rc != 0) {
+            warn("apt-get update failed; continuing with the existing package index.");
+        }
         int rc = runCommand(
             "sudo apt-get install -y build-essential cmake git "
             "libssl-dev libjsoncpp-dev zlib1g-dev uuid-dev");
@@ -908,6 +913,117 @@ static std::vector<std::string> splitString(const std::string& str) {
         tokens.push_back(token);
     }
     return tokens;
+}
+
+struct MigratedColumn {
+    std::string name;
+    std::string type;
+    std::string options;
+};
+
+struct MigratedTable {
+    std::string name;
+    std::vector<MigratedColumn> columns;
+};
+
+static void parseUpSql(const std::string& sql, std::map<std::string, MigratedTable>& tables) {
+    std::istringstream stream(sql);
+    std::string line;
+    std::string currentTable = "";
+    bool insideCreateTable = false;
+
+    while (std::getline(stream, line)) {
+        line = trimString(line);
+        if (line.empty() || line.rfind("--", 0) == 0 || line.rfind("//", 0) == 0) {
+            continue;
+        }
+
+        // Check if starting a CREATE TABLE
+        if (line.rfind("CREATE TABLE IF NOT EXISTS ", 0) == 0) {
+            size_t start = 26; // length of "CREATE TABLE IF NOT EXISTS "
+            size_t end = line.find(' ', start);
+            if (end == std::string::npos) {
+                end = line.find('(', start);
+            }
+            if (end != std::string::npos) {
+                currentTable = trimString(line.substr(start, end - start));
+                tables[currentTable] = MigratedTable{currentTable, {}};
+                insideCreateTable = true;
+            }
+            continue;
+        }
+
+        // Check if ending CREATE TABLE
+        if (insideCreateTable && line == ");") {
+            insideCreateTable = false;
+            currentTable = "";
+            continue;
+        }
+
+        // If inside CREATE TABLE, parse column
+        if (insideCreateTable && !currentTable.empty()) {
+            if (line.back() == ',') {
+                line.pop_back();
+            }
+            line = trimString(line);
+
+            auto tokens = splitString(line);
+            if (tokens.size() >= 2) {
+                MigratedColumn col;
+                col.name = tokens[0];
+                col.type = tokens[1];
+                for (size_t i = 2; i < tokens.size(); ++i) {
+                    if (!col.options.empty()) col.options += " ";
+                    col.options += tokens[i];
+                }
+                tables[currentTable].columns.push_back(col);
+            }
+            continue;
+        }
+
+        // Check if ALTER TABLE table_name ADD COLUMN column_name TYPE OPTIONS
+        if (line.rfind("ALTER TABLE ", 0) == 0) {
+            auto tokens = splitString(line);
+            if (tokens.size() >= 7 && tokens[3] == "ADD" && tokens[4] == "COLUMN") {
+                std::string tableName = tokens[2];
+                std::string colName = tokens[5];
+                std::string colType = tokens[6];
+                std::string colOpts = "";
+                for (size_t i = 7; i < tokens.size(); ++i) {
+                    if (!colOpts.empty()) colOpts += " ";
+                    colOpts += tokens[i];
+                }
+                if (!colOpts.empty() && colOpts.back() == ';') {
+                    colOpts.pop_back();
+                } else if (colType.back() == ';') {
+                    colType.pop_back();
+                }
+
+                tables[tableName].columns.push_back(MigratedColumn{colName, colType, colOpts});
+            }
+            // Tokens: ALTER TABLE table_name DROP COLUMN col_name
+            else if (tokens.size() >= 6 && tokens[3] == "DROP" && tokens[4] == "COLUMN") {
+                std::string tableName = tokens[2];
+                std::string colName = tokens[5];
+                if (colName.back() == ';') colName.pop_back();
+
+                auto& cols = tables[tableName].columns;
+                cols.erase(std::remove_if(cols.begin(), cols.end(), [&](const MigratedColumn& c) {
+                    return c.name == colName;
+                }), cols.end());
+            }
+            continue;
+        }
+
+        // Check for DROP TABLE
+        if (line.rfind("DROP TABLE IF EXISTS ", 0) == 0) {
+            std::string tableName = line.substr(21);
+            if (tableName.back() == ';') tableName.pop_back();
+            tableName = trimString(tableName);
+            tables.erase(tableName);
+            continue;
+        }
+    }
 }
 
 int migrate(const std::string& arg1, const std::string& arg2) {
@@ -1091,67 +1207,167 @@ int migrate(const std::string& arg1, const std::string& arg2) {
         }
     }
 
+    std::map<std::string, MigratedTable> migratedTables;
+    fs::path migrationsDir = fs::current_path() / "migrations";
+    if (fs::exists(migrationsDir) && fs::is_directory(migrationsDir)) {
+        std::vector<fs::path> paths;
+        for (const auto& entry : fs::directory_iterator(migrationsDir)) {
+            if (entry.is_directory()) {
+                paths.push_back(entry.path());
+            }
+        }
+        std::sort(paths.begin(), paths.end());
+        for (const auto& p : paths) {
+            fs::path upPath = p / "up.sql";
+            if (fs::exists(upPath)) {
+                std::ifstream upFile(upPath);
+                if (upFile.is_open()) {
+                    std::string content((std::istreambuf_iterator<char>(upFile)),
+                                        std::istreambuf_iterator<char>());
+                    parseUpSql(content, migratedTables);
+                }
+            }
+        }
+    }
+
     // Generate up.sql and down.sql migrations
     std::ostringstream up_sql;
     std::ostringstream down_sql;
+    bool destructive_change = false;
+
+    auto getFieldSql = [&](const FieldInfo& f) -> std::pair<std::string, std::string> {
+        std::string sql_type;
+        if (f.type == "Serial") {
+            if (dbProvider == "sqlite" || dbProvider == "sqlite3") {
+                sql_type = "INTEGER PRIMARY KEY AUTOINCREMENT";
+            } else if (dbProvider == "mysql") {
+                sql_type = "BIGINT AUTO_INCREMENT PRIMARY KEY";
+            } else {
+                sql_type = "SERIAL PRIMARY KEY";
+            }
+        } else if (f.type == "Int") {
+            sql_type = "INTEGER";
+        } else if (f.type == "Float") {
+            sql_type = "REAL";
+        } else if (f.type == "Boolean") {
+            sql_type = "BOOLEAN";
+        } else if (f.type == "DateTime") {
+            sql_type = "TIMESTAMP";
+        } else {
+            sql_type = "TEXT";
+        }
+
+        std::string opts = "";
+        if (f.isPrimaryKey && f.type != "Serial") {
+            opts += " PRIMARY KEY";
+        }
+        if (!f.nullable && !f.isPrimaryKey && f.type != "Serial") {
+            opts += " NOT NULL";
+        }
+        if (f.isUnique && !f.isPrimaryKey) {
+            opts += " UNIQUE";
+        }
+        if (f.isDefaultNow) {
+            if (dbProvider == "sqlite" || dbProvider == "sqlite3") {
+                opts += " DEFAULT CURRENT_TIMESTAMP";
+            } else {
+                opts += " DEFAULT NOW()";
+            }
+        }
+        return {sql_type, opts};
+    };
+
+    std::set<std::string> currentTableNames;
 
     for (const auto& model : models) {
-        up_sql << "CREATE TABLE IF NOT EXISTS " << model.tableName << " (\n";
-        bool first = true;
-        for (const auto& f : model.fields) {
-            if (f.isRelation) continue;
-            if (!first) up_sql << ",\n";
-            first = false;
+        currentTableNames.insert(model.tableName);
 
-            std::string sql_type;
-            if (f.type == "Serial") {
-                if (dbProvider == "sqlite" || dbProvider == "sqlite3") {
-                    sql_type = "INTEGER PRIMARY KEY AUTOINCREMENT";
-                } else {
-                    sql_type = "SERIAL PRIMARY KEY";
+        auto it = migratedTables.find(model.tableName);
+        if (it == migratedTables.end()) {
+            up_sql << "CREATE TABLE IF NOT EXISTS " << model.tableName << " (\n";
+            bool first = true;
+            for (const auto& f : model.fields) {
+                if (f.isRelation) continue;
+                if (!first) up_sql << ",\n";
+                first = false;
+
+                auto [sql_type, opts] = getFieldSql(f);
+                up_sql << "  " << f.name << " " << sql_type << opts;
+            }
+            up_sql << "\n);\n\n";
+
+            down_sql << "DROP TABLE IF EXISTS " << model.tableName << ";\n";
+        } else {
+            const auto& existingTable = it->second;
+
+            // Check for new columns
+            for (const auto& f : model.fields) {
+                if (f.isRelation) continue;
+
+                bool exists = false;
+                for (const auto& col : existingTable.columns) {
+                    if (col.name == f.name) {
+                        exists = true;
+                        break;
+                    }
                 }
-            } else if (f.type == "Int") {
-                sql_type = "INTEGER";
-            } else if (f.type == "Float") {
-                sql_type = "REAL";
-            } else if (f.type == "Boolean") {
-                sql_type = "BOOLEAN";
-            } else if (f.type == "DateTime") {
-                sql_type = "TIMESTAMP";
-            } else {
-                sql_type = "TEXT";
-            }
 
-            std::string opts = "";
-            if (f.isPrimaryKey && f.type != "Serial") {
-                opts += " PRIMARY KEY";
-            }
-            if (!f.nullable && !f.isPrimaryKey && f.type != "Serial") {
-                opts += " NOT NULL";
-            }
-            if (f.isUnique && !f.isPrimaryKey) {
-                opts += " UNIQUE";
-            }
-            if (f.isDefaultNow) {
-                if (dbProvider == "sqlite" || dbProvider == "sqlite3") {
-                    opts += " DEFAULT CURRENT_TIMESTAMP";
-                } else {
-                    opts += " DEFAULT NOW()";
+                if (!exists) {
+                    auto [sql_type, opts] = getFieldSql(f);
+                    up_sql << "ALTER TABLE " << model.tableName << " ADD COLUMN " << f.name << " " << sql_type << opts << ";\n";
+                    down_sql << "ALTER TABLE " << model.tableName << " DROP COLUMN " << f.name << ";\n";
                 }
             }
 
-            up_sql << "  " << f.name << " " << sql_type << opts;
+            // Check for removed columns
+            for (const auto& col : existingTable.columns) {
+                bool exists = false;
+                for (const auto& f : model.fields) {
+                    if (f.isRelation) continue;
+                    if (f.name == col.name) {
+                        exists = true;
+                        break;
+                    }
+                }
+
+                if (!exists) {
+                    destructive_change = true;
+                    up_sql << "ALTER TABLE " << model.tableName << " DROP COLUMN " << col.name << ";\n";
+                    down_sql << "ALTER TABLE " << model.tableName << " ADD COLUMN " << col.name << " " << col.type << (col.options.empty() ? "" : " " + col.options) << ";\n";
+                }
+            }
         }
-        up_sql << "\n);\n\n";
+    }
+    // Check for dropped tables
+    for (const auto& pair : migratedTables) {
+        if (currentTableNames.find(pair.first) == currentTableNames.end()) {
+            destructive_change = true;
+            up_sql << "DROP TABLE IF EXISTS " << pair.first << ";\n";
+            down_sql << "CREATE TABLE IF NOT EXISTS " << pair.first << " (\n";
+            bool first = true;
+            for (const auto& col : pair.second.columns) {
+                if (!first) down_sql << ",\n";
+                first = false;
+                down_sql << "  " << col.name << " " << col.type << (col.options.empty() ? "" : " " + col.options);
+            }
+            down_sql << "\n);\n";
+        }
+    }
 
-        down_sql << "DROP TABLE IF EXISTS " << model.tableName << ";\n";
+    const bool accept_data_loss = arg1 == "--accept-data-loss" || arg2 == "--accept-data-loss";
+    if (destructive_change && !accept_data_loss) {
+        error("Migration contains destructive changes.",
+              "One or more columns or tables would be dropped.",
+              "Review the generated schema change, back up your data, then run:\n"
+              "    xp migrate <name> --accept-data-loss");
+        return 1;
     }
 
     // Save migration files
     std::string migration_name = "migration";
-    if (!arg1.empty() && arg1 != "dev" && arg1 != "--name") {
+    if (!arg1.empty() && arg1 != "dev" && arg1 != "--name" && arg1 != "--accept-data-loss") {
         migration_name = arg1;
-    } else if (!arg2.empty() && arg2 != "--name") {
+    } else if (!arg2.empty() && arg2 != "--name" && arg2 != "--accept-data-loss") {
         migration_name = arg2;
     }
 
@@ -1162,18 +1378,26 @@ int migrate(const std::string& arg1, const std::string& arg2) {
     std::string timestamp(buf);
 
     std::string migration_dir_name = timestamp + "_" + migration_name;
-    fs::path migration_path = fs::current_path() / "migrations" / migration_dir_name;
-    fs::create_directories(migration_path);
+    if (!up_sql.str().empty()) {
+        fs::path migration_path = fs::current_path() / "migrations" / migration_dir_name;
+        fs::create_directories(migration_path);
 
-    std::ofstream up_file(migration_path / "up.sql");
-    up_file << up_sql.str();
-    up_file.close();
+        std::ofstream up_file(migration_path / "up.sql");
+        up_file << up_sql.str();
 
-    std::ofstream down_file(migration_path / "down.sql");
-    down_file << down_sql.str();
-    down_file.close();
+        std::ofstream down_file(migration_path / "down.sql");
+        down_file << down_sql.str();
 
-    success("Generated migration files in migrations/" + migration_dir_name);
+        // Preserve the exact schema that produced this migration. Future diffing can use
+        // this stable snapshot instead of attempting to reverse-engineer arbitrary SQL.
+        std::ifstream schema_input(schemaPath, std::ios::binary);
+        std::ofstream schema_snapshot(migration_path / "schema.xp.snapshot", std::ios::binary);
+        schema_snapshot << schema_input.rdbuf();
+
+        success("Generated migration files in migrations/" + migration_dir_name);
+    } else {
+        info("Schema is already up to date; no empty migration was created.");
+    }
 
     fs::path modelsDir = fs::current_path() / "build" / "generated";
     fs::create_directories(modelsDir);

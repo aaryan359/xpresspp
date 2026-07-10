@@ -5,11 +5,13 @@
 
 #include <filesystem>
 #include <fstream>
+#include <concepts>
 #include <initializer_list>
 #include <sstream>
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 namespace xp {
 
@@ -132,6 +134,20 @@ public:
         return *this;
     }
 
+    template <typename T>
+    requires requires(const T& value) { { value.toJson() } -> std::convertible_to<Json::Value>; }
+    Response& json(const T& value) {
+        return json(value.toJson());
+    }
+
+    template <typename T>
+    requires requires(const T& value) { { value.toJson() } -> std::convertible_to<Json::Value>; }
+    Response& json(const std::vector<T>& values) {
+        Json::Value result(Json::arrayValue);
+        for (const auto& value : values) result.append(value.toJson());
+        return json(result);
+    }
+
     Response& json(const drogon::orm::Result& res) {
         Json::Value arr(Json::arrayValue);
         for (const auto& row : res) {
@@ -165,6 +181,20 @@ public:
     Response& ok(const Json::Value& value) {
         status(200);
         return json(value);
+    }
+
+    template <typename T>
+    requires requires(const T& value) { { value.toJson() } -> std::convertible_to<Json::Value>; }
+    Response& ok(const T& value) {
+        status(200);
+        return json(value);
+    }
+
+    template <typename T>
+    requires requires(const T& value) { { value.toJson() } -> std::convertible_to<Json::Value>; }
+    Response& ok(const std::vector<T>& values) {
+        status(200);
+        return json(values);
     }
 
     Response& ok(std::initializer_list<std::pair<std::string, Json::Value>> items) {

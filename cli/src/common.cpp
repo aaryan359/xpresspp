@@ -94,6 +94,8 @@ void usage() {
         << "    xp build   [--release]  Compile the current project\n"
         << "    xp run     [--release]  Build and run the server\n"
         << "    xp migrate [name]       Generate C++ models and synchronize database schema\n"
+        << "    xp migrate deploy       Apply checked-in migrations without generating new ones\n"
+        << "    xp db push              Push schema directly without creating migration history\n"
         << "    xp migrate <name> --accept-data-loss  Allow reviewed DROP operations\n"
         << "    xp watch                Alias for xp dev\n"
         << "    xp dockerize            Auto-generate optimized multi-stage Dockerfile\n"

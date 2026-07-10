@@ -77,59 +77,30 @@ int main() {
         int64_t userId = body["userId"].asInt64();
         std::string newRole = body["newRole"].asString();
 
-        std::cout << "[ACID Demo] Starting transaction..." << std::endl;
-        auto tx = await beginTransaction();
-
-        bool success = false;
-        std::string err_msg;
         try {
-            // Find user using FOR UPDATE lock to guarantee isolation/locking
-            Json::Value lockQuery;
-            lockQuery["where"]["id"] = userId;
-            lockQuery["forUpdate"] = true;
+            auto user = await xpd.transaction([&](TransactionClient& tx) -> drogon::Task<std::optional<User>> {
+                auto existing = await tx.user.query()
+                    .where(UserColumns::id == userId)
+                    .forUpdate()
+                    .one();
+                if (!existing) co_return std::nullopt;
+                if (newRole == "fail") {
+                    throw std::invalid_argument("Simulated business validation failure");
+                }
+                UserUpdate update;
+                update.role = newRole;
+                co_return await tx.user.updateById(userId, update);
+            });
 
-            std::cout << "[ACID Demo] Fetching user " << userId << " with lock (FOR UPDATE)..." << std::endl;
-            auto user = await tx.user.findUnique(lockQuery);
-
-            if (user.isNull()) {
-                std::cout << "[ACID Demo] User not found. Rolling back transaction." << std::endl;
-                await tx.rollback();
+            if (!user) {
                 res.status(404).json({{"error", "User not found"}});
                 co_return;
             }
-
-            // Simulate business logic validation: if role is "fail", trigger explicit rollback to show ACID
-            if (newRole == "fail") {
-                std::cout << "[ACID Demo] Invalid role requested. Rolling back transaction." << std::endl;
-                await tx.rollback();
-                res.status(400).json({{"error", "Simulated business validation failed, transaction rolled back"}});
-                co_return;
-            }
-
-            // Update user role inside the transaction
-            Json::Value updateWhere;
-            updateWhere["id"] = userId;
-            Json::Value updateData;
-            updateData["role"] = newRole;
-
-            std::cout << "[ACID Demo] Updating user role to '" << newRole << "' inside transaction..." << std::endl;
-            await tx.user.update(updateWhere, updateData);
-
-            // Commit transaction
-            std::cout << "[ACID Demo] Committing transaction..." << std::endl;
-            await tx.commit();
-            success = true;
-
             res.ok({{"message", "Transaction committed successfully"}, {"userId", userId}, {"newRole", newRole}});
+        } catch (const std::invalid_argument& e) {
+            res.status(400).json({{"error", e.what()}});
         } catch (const std::exception& e) {
-            std::cerr << "[ACID Demo] Exception encountered: " << e.what() << std::endl;
-            err_msg = e.what();
-        }
-
-        if (!success && err_msg.length() > 0) {
-            std::cout << "[ACID Demo] Rolling back transaction due to exception..." << std::endl;
-            await tx.rollback();
-            res.status(500).json({{"error", std::string("Internal error: ") + err_msg}});
+            res.status(500).json({{"error", std::string("Internal error: ") + e.what()}});
         }
     });
 

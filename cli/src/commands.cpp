@@ -1,6 +1,8 @@
 #include "cli/commands.h"
 #include "cli/diagnostics.h"
 #include "cli/common.h"
+#include "cli/schema_ir.h"
+#include "cli/db_generator.h"
 #include <iostream>
 #include <fstream>
 #include <unordered_map>
@@ -870,25 +872,8 @@ int test() {
 // ============================================================
 //  Migrate Command (Xpress++ Database Schema Parser and Generator)
 // ============================================================
-struct FieldInfo {
-    std::string name;
-    std::string type;
-    bool nullable = false;
-    bool isPrimaryKey = false;
-    bool isUnique = false;
-    bool isDefaultNow = false;
-    bool isRelation = false;
-    bool isList = false;
-    std::string relationModel;
-    std::string relationFields;
-    std::string relationReferences;
-};
-
-struct ModelInfo {
-    std::string name;
-    std::string tableName;
-    std::vector<FieldInfo> fields;
-};
+using FieldInfo = FieldIR;
+using ModelInfo = ModelIR;
 
 static std::string trimString(const std::string& str) {
     auto start = str.find_first_not_of(" \t\r\n");
@@ -913,6 +898,14 @@ static std::vector<std::string> splitString(const std::string& str) {
         tokens.push_back(token);
     }
     return tokens;
+}
+
+static bool isSafeSqlIdentifier(const std::string& value) {
+    if (value.empty() || !(std::isalpha(static_cast<unsigned char>(value.front())) || value.front() == '_'))
+        return false;
+    return std::all_of(value.begin() + 1, value.end(), [](unsigned char c) {
+        return std::isalnum(c) || c == '_';
+    });
 }
 
 struct MigratedColumn {
@@ -1027,6 +1020,16 @@ static void parseUpSql(const std::string& sql, std::map<std::string, MigratedTab
 }
 
 int migrate(const std::string& arg1, const std::string& arg2) {
+    if (arg1 == "deploy") {
+        info("Deploying checked-in migrations without changing the schema plan...");
+        if (build(false) != 0) return 1;
+        const auto binary = projectBinary();
+        if (binary.empty()) {
+            error("No executable found for migrate deploy.");
+            return 1;
+        }
+        return runCommand(binary + " --migrate");
+    }
     if (arg1 == "rollback") {
         info("Rebuilding and running database migrations rollback...");
         if (build(false) != 0) {
@@ -1071,8 +1074,9 @@ int migrate(const std::string& arg1, const std::string& arg2) {
         return 1;
     }
 
-    std::string dbProvider = "postgresql"; // default provider
-    std::vector<ModelInfo> models;
+    SchemaIR schema;
+    auto& dbProvider = schema.provider;
+    auto& models = schema.models;
     ModelInfo currentModel;
     bool inModel = false;
     std::string line;
@@ -1165,6 +1169,8 @@ int migrate(const std::string& arg1, const std::string& arg2) {
                     }
                 }
 
+                f.kind = scalarKind(f.type, f.isRelation);
+
                 for (size_t i = 2; i < tokens.size(); ++i) {
                     std::string dec = tokens[i];
                     if (dec == "@id") {
@@ -1180,6 +1186,8 @@ int migrate(const std::string& arg1, const std::string& arg2) {
                         }
                     }
                 }
+
+                f.kind = scalarKind(f.type, f.isRelation);
 
                 currentModel.fields.push_back(f);
             }
@@ -1207,6 +1215,20 @@ int migrate(const std::string& arg1, const std::string& arg2) {
         }
     }
 
+    for (const auto& model : models) {
+        if (!isSafeSqlIdentifier(model.name) || !isSafeSqlIdentifier(model.tableName)) {
+            error("Unsafe model or table identifier in schema.xp: " + model.name,
+                  "Identifiers may contain only letters, numbers, and underscores.");
+            return 1;
+        }
+        for (const auto& field : model.fields) {
+            if (!isSafeSqlIdentifier(field.name)) {
+                error("Unsafe field identifier in schema.xp: " + model.name + "." + field.name);
+                return 1;
+            }
+        }
+    }
+
     std::map<std::string, MigratedTable> migratedTables;
     fs::path migrationsDir = fs::current_path() / "migrations";
     if (fs::exists(migrationsDir) && fs::is_directory(migrationsDir)) {
@@ -1217,16 +1239,28 @@ int migrate(const std::string& arg1, const std::string& arg2) {
             }
         }
         std::sort(paths.begin(), paths.end());
-        for (const auto& p : paths) {
-            fs::path upPath = p / "up.sql";
-            if (fs::exists(upPath)) {
-                std::ifstream upFile(upPath);
-                if (upFile.is_open()) {
-                    std::string content((std::istreambuf_iterator<char>(upFile)),
-                                        std::istreambuf_iterator<char>());
-                    parseUpSql(content, migratedTables);
+        // The latest canonical schema snapshot is the migration baseline. SQL is an
+        // output artifact and is deliberately never reverse-parsed.
+        for (auto it = paths.rbegin(); it != paths.rend(); ++it) {
+            const auto previous = readSchemaJson(((*it) / "schema.json").string());
+            if (!previous) continue;
+            for (const auto& model : previous->models) {
+                MigratedTable table{model.tableName, {}};
+                for (const auto& field : model.fields) {
+                    if (field.isRelation) continue;
+                    std::string sqlType = "TEXT";
+                    if (field.type == "Serial") {
+                        sqlType = (dbProvider == "sqlite" || dbProvider == "sqlite3") ? "INTEGER" :
+                                  (dbProvider == "mysql" ? "BIGINT" : "SERIAL");
+                    } else if (field.type == "Int") sqlType = "INTEGER";
+                    else if (field.type == "Float") sqlType = "REAL";
+                    else if (field.type == "Boolean") sqlType = "BOOLEAN";
+                    else if (field.type == "DateTime") sqlType = "TIMESTAMP";
+                    table.columns.push_back({field.name, std::move(sqlType), ""});
                 }
+                migratedTables.emplace(table.name, std::move(table));
             }
+            break;
         }
     }
 
@@ -1354,6 +1388,8 @@ int migrate(const std::string& arg1, const std::string& arg2) {
         }
     }
 
+    const bool db_push = arg1 == "--db-push" || arg2 == "--db-push";
+    const bool generate_only = arg1 == "--generate-only" || arg2 == "--generate-only";
     const bool accept_data_loss = arg1 == "--accept-data-loss" || arg2 == "--accept-data-loss";
     if (destructive_change && !accept_data_loss) {
         error("Migration contains destructive changes.",
@@ -1378,7 +1414,7 @@ int migrate(const std::string& arg1, const std::string& arg2) {
     std::string timestamp(buf);
 
     std::string migration_dir_name = timestamp + "_" + migration_name;
-    if (!up_sql.str().empty()) {
+    if (!up_sql.str().empty() && !generate_only && !db_push) {
         fs::path migration_path = fs::current_path() / "migrations" / migration_dir_name;
         fs::create_directories(migration_path);
 
@@ -1394,13 +1430,20 @@ int migrate(const std::string& arg1, const std::string& arg2) {
         std::ofstream schema_snapshot(migration_path / "schema.xp.snapshot", std::ios::binary);
         schema_snapshot << schema_input.rdbuf();
 
+        writeSchemaJson(schema, (migration_path / "schema.json").string());
+
         success("Generated migration files in migrations/" + migration_dir_name);
-    } else {
+    } else if (!generate_only && !db_push) {
         info("Schema is already up to date; no empty migration was created.");
     }
 
     fs::path modelsDir = fs::current_path() / "build" / "generated";
     fs::create_directories(modelsDir);
+    writeSchemaJson(schema, (modelsDir / "schema.json").string());
+    if (db_push) {
+        std::ofstream pushPlan(modelsDir / "db_push.sql", std::ios::binary);
+        pushPlan << up_sql.str();
+    }
     info("Generating unified C++ DB client in build/generated/db.h ...");
 
     // Clean up old individual files if they exist to prevent clutter
@@ -1411,6 +1454,7 @@ int migrate(const std::string& arg1, const std::string& arg2) {
     }
     fs::remove(modelsDir / "schema_sync.h");
 
+#if 0 // Legacy dynamic JSON generator retained only until the next source cleanup.
     fs::path dbHeaderPath = modelsDir / "db.h";
     std::ofstream dbOut(dbHeaderPath);
     if (!dbOut.is_open()) {
@@ -1738,7 +1782,14 @@ int migrate(const std::string& arg1, const std::string& arg2) {
     dbOut << "inline AutoSyncRegister auto_sync_register_instance;\n";
 
     dbOut.close();
+#else
+    generateDatabaseHeader(schema, (modelsDir / "db.h").string());
+#endif
     success("Generated unified Xpress++ DB client in build/generated/db.h");
+    if (generate_only) {
+        success("Generated schema.json and typed database client without applying migrations.");
+        return 0;
+    }
     divider();
 
     info("Rebuilding and running database migrations...");
@@ -1753,9 +1804,10 @@ int migrate(const std::string& arg1, const std::string& arg2) {
         return 1;
     }
 
-    info("Running migrations: " + binary + " --migrate");
+    const std::string runtimeFlag = db_push ? " --db-push" : " --migrate";
+    info(std::string(db_push ? "Pushing schema: " : "Running migrations: ") + binary + runtimeFlag);
     divider();
-    int rc = runCommand(binary + " --migrate");
+    int rc = runCommand(binary + runtimeFlag);
     if (rc == 0) {
         success("Database migrations applied successfully!");
     } else {

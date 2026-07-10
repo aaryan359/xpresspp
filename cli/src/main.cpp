@@ -41,6 +41,9 @@ int main(int argc, char** argv) {
         std::string arg2 = (argc > 3) ? argv[3] : "";
         return xp::cli::migrate(arg1, arg2);
     }
+    if (command == "db" && argc > 2 && std::string(argv[2]) == "push") {
+        return xp::cli::migrate("--db-push", argc > 3 ? argv[3] : "");
+    }
     if (command == "dockerize") return xp::cli::dockerize();
     if (command == "test") return xp::cli::test();
     if (command == "--version" || command == "version" || command == "-v") {

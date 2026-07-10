@@ -13,6 +13,8 @@
 #include <algorithm>
 #include <sstream>
 #include <functional>
+#include <iomanip>
+#include <map>
 #include "utils.h"
 
 namespace drogon::orm {
@@ -847,6 +849,40 @@ public:
         return str;
     }
 
+    static std::string migrationChecksum(std::string_view content) {
+        // Stable FNV-1a fingerprint. This detects edited applied migrations without
+        // introducing a platform-specific crypto dependency in the header-only core.
+        std::uint64_t hash = 14695981039346656037ULL;
+        for (const unsigned char byte : content) {
+            hash ^= byte;
+            hash *= 1099511628211ULL;
+        }
+        std::ostringstream value;
+        value << std::hex << std::setfill('0') << std::setw(16) << hash;
+        return value.str();
+    }
+
+    std::string migrationPlaceholder(std::size_t index) const {
+        const auto name = active_driver_ ? active_driver_->name() : std::string("postgresql");
+        return name == "postgresql" ? "$" + std::to_string(index) : "?";
+    }
+
+    drogon::Task<void> acquireMigrationLock(const drogon::orm::DbClientPtr& client) {
+        const auto name = active_driver_ ? active_driver_->name() : std::string();
+        if (name == "postgresql")
+            co_await executeParameterized(client, "SELECT pg_advisory_lock(8675309001);", {});
+        else if (name == "mysql")
+            co_await executeParameterized(client, "SELECT GET_LOCK('xpresspp_migrations', 30);", {});
+    }
+
+    drogon::Task<void> releaseMigrationLock(const drogon::orm::DbClientPtr& client) {
+        const auto name = active_driver_ ? active_driver_->name() : std::string();
+        if (name == "postgresql")
+            co_await executeParameterized(client, "SELECT pg_advisory_unlock(8675309001);", {});
+        else if (name == "mysql")
+            co_await executeParameterized(client, "SELECT RELEASE_LOCK('xpresspp_migrations');", {});
+    }
+
     drogon::Task<void> runMigrations() {
         auto client = drogon::app().getDbClient("default");
         if (!client) co_return;
@@ -858,18 +894,25 @@ public:
             "CREATE TABLE IF NOT EXISTS _xp_migrations ("
             "  id VARCHAR(255) PRIMARY KEY,"
             "  name VARCHAR(255) NOT NULL,"
+            "  checksum VARCHAR(64) NOT NULL,"
             "  appliedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
             ");";
         co_await executeParameterized(client, create_table_sql, emptyParams);
+        co_await acquireMigrationLock(client);
 
         // 2. Read applied migrations
-        std::vector<std::string> applied;
+        std::map<std::string, std::string> applied;
+        bool historyReadFailed = false;
         try {
-            auto result = co_await executeParameterized(client, "SELECT id FROM _xp_migrations ORDER BY id ASC;", emptyParams);
+            auto result = co_await executeParameterized(client, "SELECT id, checksum FROM _xp_migrations ORDER BY id ASC;", emptyParams);
             for (const auto& row : result) {
-                applied.push_back(row["id"].as<std::string>());
+                applied.emplace(row["id"].as<std::string>(), row["checksum"].as<std::string>());
             }
-        } catch (...) {}
+        } catch (...) { historyReadFailed = true; }
+        if (historyReadFailed) {
+            co_await releaseMigrationLock(client);
+            throw std::runtime_error("Migration history is missing checksums. Back up the database and repair _xp_migrations before deploy.");
+        }
 
         // 3. Scan migrations/ folder
         std::vector<std::string> migration_dirs;
@@ -884,14 +927,21 @@ public:
 
         // 4. Run pending migrations
         for (const auto& dir : migration_dirs) {
-            if (std::find(applied.begin(), applied.end(), dir) == applied.end()) {
-                std::string up_path = "migrations/" + dir + "/up.sql";
-                if (!std::filesystem::exists(up_path)) continue;
+            std::string up_path = "migrations/" + dir + "/up.sql";
+            if (!std::filesystem::exists(up_path)) continue;
 
-                std::ifstream f(up_path);
-                if (!f.is_open()) continue;
-                std::string sql((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-                if (sql.empty()) continue;
+            std::ifstream f(up_path);
+            if (!f.is_open()) continue;
+            std::string sql((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+            if (sql.empty()) continue;
+            const auto checksum = migrationChecksum(sql);
+            if (const auto appliedMigration = applied.find(dir); appliedMigration != applied.end()) {
+                if (appliedMigration->second != checksum) {
+                    co_await releaseMigrationLock(client);
+                    throw std::runtime_error("Applied migration was modified: " + dir);
+                }
+                continue;
+            }
 
                 std::cout << "[Xpress++ Migration] Applying migration: " << dir << std::endl;
                 bool failed = false;
@@ -916,9 +966,12 @@ public:
                     std::vector<QueryParam> recordParams;
                     recordParams.push_back(QueryParam(dir));
                     recordParams.push_back(QueryParam(name));
+                    recordParams.push_back(QueryParam(checksum));
                     co_await executeParameterized(
                         client, 
-                        "INSERT INTO _xp_migrations (id, name) VALUES ($1, $2);", 
+                        "INSERT INTO _xp_migrations (id, name, checksum) VALUES (" +
+                            migrationPlaceholder(1) + ", " + migrationPlaceholder(2) + ", " +
+                            migrationPlaceholder(3) + ");",
                         recordParams
                     );
                     std::cout << "[Xpress++ Migration] Successfully applied migration: " << dir << std::endl;
@@ -946,9 +999,24 @@ public:
                             }
                         } catch (...) {}
                     }
+                    co_await releaseMigrationLock(client);
                     throw std::runtime_error(error_msg);
                 }
-            }
+        }
+        co_await releaseMigrationLock(client);
+    }
+
+    drogon::Task<void> runDbPush(const std::string& path = "build/generated/db_push.sql") {
+        auto client = drogon::app().getDbClient("default");
+        if (!client) throw std::runtime_error("Database is not connected");
+        std::ifstream input(path, std::ios::binary);
+        if (!input) throw std::runtime_error("db push plan not found: " + path);
+        const std::string sql((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+        std::stringstream statements(sql);
+        std::string statement;
+        while (std::getline(statements, statement, ';')) {
+            statement = trim(std::move(statement));
+            if (!statement.empty()) co_await executeParameterized(client, statement, {});
         }
     }
 
@@ -995,7 +1063,8 @@ public:
 
             std::vector<QueryParam> delParams;
             delParams.push_back(QueryParam(last_id));
-            co_await executeParameterized(client, "DELETE FROM _xp_migrations WHERE id = $1;", delParams);
+            co_await executeParameterized(client,
+                "DELETE FROM _xp_migrations WHERE id = " + migrationPlaceholder(1) + ";", delParams);
             std::cout << "[Xpress++ Migration] Successfully rolled back migration: " << last_id << std::endl;
         } catch (const std::exception& e) {
             std::cerr << "[Xpress++ Migration Error] Rollback failed: " << e.what() << std::endl;

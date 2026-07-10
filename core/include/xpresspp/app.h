@@ -570,6 +570,7 @@ public:
         drogon::app().registerBeginningAdvice([]() {
             bool is_rollback = false;
             bool is_migrate = false;
+            bool is_db_push = false;
             std::ifstream cmdline("/proc/self/cmdline");
             if (cmdline.is_open()) {
                 std::string arg;
@@ -578,6 +579,8 @@ public:
                         is_rollback = true;
                     } else if (arg == "--migrate" || arg == "-m") {
                         is_migrate = true;
+                    } else if (arg == "--db-push") {
+                        is_db_push = true;
                     }
                 }
             }
@@ -592,7 +595,19 @@ public:
                 }
             }
 
-            if (is_rollback) {
+            if (is_db_push) {
+                auto do_push = []() -> drogon::AsyncTask {
+                    try {
+                        co_await xp::DatabaseManager::instance().runDbPush();
+                        drogon::app().quit();
+                    } catch (const std::exception& e) {
+                        std::cerr << "[Xpress++ DB Push Error] " << e.what() << std::endl;
+                        migration_failed.store(true);
+                        drogon::app().quit();
+                    }
+                };
+                do_push();
+            } else if (is_rollback) {
                 auto do_rollback = []() -> drogon::AsyncTask {
                     try {
                         co_await xp::DatabaseManager::instance().rollbackLastMigration();
@@ -1013,8 +1028,16 @@ public:
         return is_migrate;
     }
 
+    bool isDbPushRequested() const {
+        std::ifstream cmdline("/proc/self/cmdline");
+        std::string arg;
+        while (cmdline.is_open() && std::getline(cmdline, arg, '\0'))
+            if (arg == "--db-push") return true;
+        return false;
+    }
+
     void handleMigrationIfRequested() {
-        if (isRollbackRequested() || isMigrateRequested()) {
+        if (isRollbackRequested() || isMigrateRequested() || isDbPushRequested()) {
             xp::loadEnv();
             if (!xp::DatabaseManager::instance().isConnected()) {
                 if (const char* db_url = std::getenv("DATABASE_URL")) {

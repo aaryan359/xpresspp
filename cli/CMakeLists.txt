@@ -11,6 +11,8 @@ add_executable(xp
     src/common.cpp
     src/diagnostics.cpp
     src/commands.cpp
+    src/schema_ir.cpp
+    src/db_generator.cpp
 )
 
 # Add local include/ directory to compilation path

@@ -156,6 +156,45 @@ void testStaticTraversalProtection() {
     std::filesystem::remove_all(base);
 }
 
+struct QueryTestModel {};
+
+static_assert(!std::is_copy_constructible_v<xp::data::TransactionContext>);
+static_assert(!std::is_move_constructible_v<xp::data::TransactionContext>);
+
+void testTypedQueryRendering() {
+    xp::data::Column<QueryTestModel, std::int64_t> id(0);
+    xp::data::Column<QueryTestModel, std::string> name(1);
+    xp::data::QuerySpec<QueryTestModel> spec;
+    spec.where = (id >= 10) && name.startsWith("ary");
+    spec.orderBy.push_back(name.asc());
+    spec.limit = 25;
+    spec.offset = 5;
+
+    xp::data::PostgreSqlRenderer<QueryTestModel> renderer(
+        [](std::size_t field) -> std::string_view {
+            static constexpr std::string_view fields[] = {"id", "name"};
+            return field < std::size(fields) ? fields[field] : std::string_view{};
+        });
+    const auto query = renderer.select("users", "id, name", spec);
+    require(query.sql ==
+        "SELECT id, name FROM users WHERE (id >= $1 AND name LIKE $2) ORDER BY name ASC LIMIT 25 OFFSET 5",
+        "typed PostgreSQL query rendered incorrectly: " + query.sql);
+    require(query.parameters.size() == 2, "typed query did not bind both values");
+
+    bool rejected = false;
+    try {
+        renderer.remove("users", {});
+    } catch (const std::invalid_argument&) {
+        rejected = true;
+    }
+    require(rejected, "delete without where was not rejected");
+
+    xp::data::Patch<std::optional<std::string>> patch;
+    require(!patch.present(), "empty patch was marked present");
+    patch = nullptr;
+    require(patch.present() && !patch.value(), "explicit SQL NULL was not preserved");
+}
+
 } // namespace
 
 int main() {
@@ -167,6 +206,7 @@ int main() {
         testMemoryCache();
         testAsyncMiddlewareContract();
         testStaticTraversalProtection();
+        testTypedQueryRendering();
         std::cout << "Xpress++ core tests passed\n";
         return 0;
     } catch (const std::exception& error) {

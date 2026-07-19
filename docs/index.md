@@ -3,12 +3,15 @@ layout: home
 
 hero:
   name: "Xpress++"
-  text: "Dragon speed.\nExpress simplicity."
-  tagline: Build blazing-fast C++ web servers with a familiar, comfortable API — powered by Drogon under the hood.
+  text: "Fast C++ APIs for web, data, and native AI."
+  tagline: Build Drogon-powered services with an Express-like API, built-in middleware, SQL tooling, and lightweight helpers for exposing C++ AI workloads.
   actions:
     - theme: brand
       text: Get Started →
       link: /getting-started
+    - theme: alt
+      text: AI Interface
+      link: /ai
     - theme: alt
       text: Performance Benchmarks
       link: /benchmarks
@@ -50,8 +53,8 @@ hero:
 
 <!-- Detailed Callout / Installation Command (Moved Between Stats & Code Blocks) -->
 <div class="cta-banner">
-  <h3>Ready to build high-performance microservices?</h3>
-  <p>Run the single command CLI installer to get started immediately.</p>
+  <h3>Wrap native C++ workloads in clean HTTP APIs</h3>
+  <p>Use Xpress++ for API services, SQL-backed backends, and local AI runtimes such as llama.cpp, ONNX Runtime, Whisper.cpp, or custom C++ inference.</p>
   <div class="install-command">
     <code>curl -fsSL https://raw.githubusercontent.com/aaryan359/xpresspp/main/install.sh | bash</code>
   </div>
@@ -60,8 +63,8 @@ hero:
 <!-- Side-by-Side API Comparison -->
 <div class="comparison-container">
   <div class="comparison-header">
-    <h2>Familiar Express API, Built in C++</h2>
-    <p class="subtitle">Transition from Node.js seamlessly without learning complex C++ template metaprogramming.</p>
+    <h2>Familiar API, Native Runtime</h2>
+    <p class="subtitle">Keep the route shape readable while your hot path stays close to Drogon, C++ libraries, and native model runtimes.</p>
   </div>
   
   <div class="code-wrapper">
@@ -74,9 +77,12 @@ hero:
 int main() {
     xp::App app;
 
-    // Direct, expressive routing
-    app.get("/api/user", [](xp::Request& req, xp::Response& res) {
-        res.json({
+    app.post("/chat", xp::ai::chat([](const xp::ai::ChatRequest& input) {
+        return "Native model reply for: " + input.message;
+    }));
+
+    app.get("/api/user", [](xp::Request&, xp::Response& res) {
+        res.ok({
             {"status", "success"},
             {"user", "Aaryan"}
         });
@@ -91,7 +97,7 @@ int main() {
 const express = require('express');
 const app = express();
 
-// The exact same layout
+// Familiar route shape
 app.get('/api/user', (req, res) => {
     res.json({
         status: 'success',
@@ -109,34 +115,48 @@ app.listen(3000);
 
 <!-- Feature Highlights Section (Moved to Bottom) -->
 <div class="features-section">
+  <div class="features-heading">
+    <h2>What You Can Build Today</h2>
+    <p class="subtitle">The alpha focuses on the pieces that are already useful: HTTP APIs, middleware, SQL-backed services, and native C++ workloads.</p>
+  </div>
   <div class="features-grid">
     <div class="feature-card">
-      <span class="feature-icon">⚡</span>
+      <span class="feature-icon">HTTP</span>
       <h3 class="feature-title">Drogon-powered performance</h3>
       <p class="feature-detail">Built on top of Drogon, one of the fastest HTTP frameworks in the world. Handles thousands of requests per second out of the box.</p>
     </div>
     <div class="feature-card">
-      <span class="feature-icon">🎯</span>
+      <span class="feature-icon">API</span>
       <h3 class="feature-title">Express-style API</h3>
       <p class="feature-detail">If you've used Express.js, you already know Xpress++. Routes, middleware, and responses all work exactly the way you'd expect.</p>
     </div>
     <div class="feature-card">
-      <span class="feature-icon">🛡️</span>
+      <span class="feature-icon">AI</span>
+      <h3 class="feature-title">Native AI interface</h3>
+      <p class="feature-detail">Expose C++ inference code as JSON APIs with <code>xp::ai::chat</code>. Bring your own llama.cpp, ONNX, OpenCV, Whisper, or custom model layer.</p>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">SQL</span>
+      <h3 class="feature-title">Generated SQL client</h3>
+      <p class="feature-detail">Use <code>schema.xp</code>, migrations, and the generated <code>xpd</code> client for PostgreSQL, SQLite, and MySQL-backed services.</p>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">ERR</span>
       <h3 class="feature-title">Rich error handling</h3>
       <p class="feature-detail">Typed HTTP errors, developer hints in debug mode, and colored terminal output so you always know exactly what went wrong.</p>
     </div>
     <div class="feature-card">
-      <span class="feature-icon">🧱</span>
+      <span class="feature-icon">MW</span>
       <h3 class="feature-title">Built-in middleware</h3>
       <p class="feature-detail">CORS, rate limiting, authentication, CSRF, security headers, sessions, request IDs, and body limits — all included, zero config required.</p>
     </div>
     <div class="feature-card">
-      <span class="feature-icon">📦</span>
+      <span class="feature-icon">C++20</span>
       <h3 class="feature-title">Modern C++20</h3>
       <p class="feature-detail">Uses lambdas, std::optional, std::filesystem, structured bindings, and other C++20 features for clean, expressive code.</p>
     </div>
     <div class="feature-card">
-      <span class="feature-icon">🔧</span>
+      <span class="feature-icon">CLI</span>
       <h3 class="feature-title">First-class CLI</h3>
       <p class="feature-detail">Create, build, run, and watch your projects with a single command. The xp CLI handles CMake so you don't have to.</p>
     </div>
@@ -156,12 +176,12 @@ app.listen(3000);
   padding: 0 24px;
 }
 
-.dashboard-header, .comparison-header {
+.dashboard-header, .comparison-header, .features-heading {
   text-align: center;
   margin-bottom: 40px;
 }
 
-.dashboard-header h2, .comparison-header h2 {
+.dashboard-header h2, .comparison-header h2, .features-heading h2 {
   font-size: 2.25rem;
   font-weight: 800;
   letter-spacing: -0.03em;
@@ -307,9 +327,10 @@ app.listen(3000);
 }
 
 .feature-card {
+  position: relative;
   background: var(--vp-c-bg-alt);
   border: 1px solid var(--vp-c-border);
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 28px;
   transition: all 0.2s ease;
 }
@@ -325,9 +346,21 @@ app.listen(3000);
 }
 
 .feature-icon {
-  font-size: 1.8rem;
-  display: block;
-  margin-bottom: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  height: 28px;
+  margin-bottom: 16px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--vp-c-brand-1) 36%, var(--vp-c-border));
+  border-radius: 999px;
+  color: var(--vp-c-brand-1);
+  background: var(--vp-c-brand-soft);
+  font-family: var(--vp-font-family-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
 .feature-title {

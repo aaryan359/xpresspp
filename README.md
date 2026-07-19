@@ -287,7 +287,9 @@ app.onError([](const std::exception& e, xp::Request& req, xp::Response& res) {
 
 ## Database & ORM (Xpress++ Database Client)
 
-Xpress++ features a native database-agnostic client engine that supports **PostgreSQL** and **MongoDB** out of the box. Database clients are compiled from your schema definition, completely hidden from your source tree, and fully integrated with Express-like syntax sugar.
+Xpress++ features a generated SQL database client for **PostgreSQL**, **SQLite**, and **MySQL**. Database clients are compiled from your schema definition, hidden from your source tree, and integrated with coroutine-friendly C++ syntax.
+
+> MongoDB is not part of the generated `xpd` client in this alpha. Keep MongoDB usage experimental for now.
 
 ### 1. Define your schema (`schema.xp`)
 
@@ -295,7 +297,7 @@ Create a `schema.xp` file at the root of your project:
 
 ```prisma
 datasource db {
-  provider = "postgresql" // or "mongodb"
+  provider = "postgresql" // or "sqlite" / "mysql"
 }
 
 model User {

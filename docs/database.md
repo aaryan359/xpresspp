@@ -1,6 +1,15 @@
-# Database Integration (Xpress++ Database Client)
+# Database Integration
 
-Xpress++ features a native database-agnostic client engine that supports **PostgreSQL** and **MongoDB** out of the box. Database clients are compiled dynamically from your schema definition, completely hidden from your source tree, and fully integrated with C++ coroutine syntax sugar.
+Xpress++ currently focuses its generated database client on SQL databases:
+**PostgreSQL**, **SQLite**, and **MySQL**. Database clients are compiled from
+your `schema.xp` definition into `build/generated/db.h` and exposed through the
+global `xpd` client.
+
+::: warning MongoDB status
+MongoDB is not part of the generated `xpd` client in this alpha. The runtime has
+experimental `mongocxx` plumbing, but `xp migrate` and generated models should
+use `postgresql`, `sqlite`, or `mysql` for now.
+:::
 
 ---
 
@@ -22,33 +31,18 @@ model User {
 }
 ```
 
-### MongoDB Configuration Example:
-```prisma
-datasource db {
-  provider = "mongodb"
-}
-
-model Product {
-  id        String   @id @default(uuid())
-  name      String   @unique
-  price     Double
-  active    Boolean  @default(true)
-}
-```
-
 ### Supported Data Types & Attributes:
 
-| Prisma Type | C++ Map | DB Type (Postgres) | DB Type (MongoDB) |
-|-------------|---------|--------------------|-------------------|
-| `Int`       | `int`   | `INTEGER`          | `Int32`           |
-| `String`    | `string`| `VARCHAR(255)`     | `String`          |
-| `Boolean`   | `bool`  | `BOOLEAN`          | `Boolean`         |
-| `Double`    | `double`| `DOUBLE PRECISION` | `Double`          |
-| `DateTime`  | `string`| `TIMESTAMP`        | `Date`            |
+| Schema Type | C++ Map | SQL Type |
+|-------------|---------|----------|
+| `Int`       | `std::int64_t` | `INTEGER` / `BIGINT` |
+| `String`    | `std::string` | `TEXT` |
+| `Boolean`   | `bool` | `BOOLEAN` |
+| `Double`    | `double` | `REAL` / `DOUBLE PRECISION` |
+| `DateTime`  | `std::string` | `TIMESTAMP` |
 
 *   `@id`: Marks the primary key/unique identifier of the model.
 *   `@default(autoincrement())`: PostgreSQL serial column (only for `Int` primary keys).
-*   `@default(uuid())`: Generates a dynamic UUID for the primary key (ideal for MongoDB).
 *   `@default(now())`: Automatically populates the field with the current system timestamp.
 *   `@unique`: Enforces unique constraints at the database level.
 
@@ -146,7 +140,7 @@ app.get("/users/:id", [](xp::Request& req, xp::Response& res) async {
 ```
 
 ### 3. Finding Many Records with Complex Filters (`findMany`)
-Xpress++ supports MongoDB and SQL parameterized query operators securely:
+Xpress++ supports SQL parameterized query operators securely:
 *   `equals`, `not`
 *   `gt`, `gte`, `lt`, `lte`
 *   `contains`, `startsWith`, `endsWith`

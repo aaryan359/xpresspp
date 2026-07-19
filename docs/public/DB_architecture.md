@@ -6,7 +6,11 @@ This document outlines the architecture, design patterns, and implementation of 
 
 ## 🏛️ 1. Core Architecture
 
-The database layer of Xpress++ is fully decoupled from Drogon's high-level ORM and structured into three layers to support relational (PostgreSQL, SQLite) and document (MongoDB) databases natively with zero performance overhead.
+The database layer of Xpress++ is decoupled from Drogon's high-level ORM and
+structured around a small driver interface. In the current alpha, the generated
+client and migration workflow target relational databases: PostgreSQL, SQLite,
+and MySQL. MongoDB plumbing exists as an experimental runtime direction, but it
+is not part of the generated `xpd` workflow yet.
 
 ```mermaid
 graph TD
@@ -14,7 +18,7 @@ graph TD
     ORM --> DBManager[Database Manager]
     DBManager --> IDriver[IDatabaseDriver Interface]
     IDriver --> PostgreSqlDriver[PostgreSQL Driver]
-    IDriver --> MongoDbDriver[MongoDB Driver]
+    IDriver -. experimental .-> MongoDbDriver[MongoDB Driver]
     IDriver --> SqliteDriver[SQLite Driver]
 ```
 

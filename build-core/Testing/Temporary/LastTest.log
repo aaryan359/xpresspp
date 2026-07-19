@@ -1,0 +1,19 @@
+Start testing: Jul 19 21:29 IST
+----------------------------------------------------------
+1/1 Testing: xpresspp_core_tests
+1/1 Test: xpresspp_core_tests
+Command: "/home/aaryan/Desktop/xpress++/build-core/tests/xpresspp_core_tests"
+Directory: /home/aaryan/Desktop/xpress++/build-core/tests
+"xpresspp_core_tests" start time: Jul 19 21:29 IST
+Output:
+----------------------------------------------------------
+Xpress++ core tests passed
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"xpresspp_core_tests" end time: Jul 19 21:29 IST
+"xpresspp_core_tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Jul 19 21:29 IST

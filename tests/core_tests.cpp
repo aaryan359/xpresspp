@@ -195,6 +195,34 @@ void testTypedQueryRendering() {
     require(patch.present() && !patch.value(), "explicit SQL NULL was not preserved");
 }
 
+void testAiChatHelper() {
+    xp::App app;
+    app.post("/chat", xp::ai::chat([](const xp::ai::ChatRequest& input) {
+        xp::ai::ChatResponse output;
+        output.reply = "hello " + input.message;
+        output.model = input.model;
+        output.metadata["tokens"] = 2;
+        return output;
+    }));
+
+    xp::var body;
+    body["message"] = "native ai";
+    body["model"] = "test-model";
+    const auto response = xp::request(app).post("/chat").expectStatus(200).send(body);
+    require(response.json()["reply"].asString() == "hello native ai",
+            "AI chat helper did not return generated reply");
+    require(response.json()["model"].asString() == "test-model",
+            "AI chat helper did not preserve model name");
+    require(response.json()["metadata"]["tokens"].asInt() == 2,
+            "AI chat helper did not preserve metadata");
+    require(response.json().isMember("durationMs"),
+            "AI chat helper did not include duration");
+
+    xp::var invalid;
+    invalid["prompt"] = "";
+    xp::request(app).post("/chat").expectStatus(400).send(invalid);
+}
+
 } // namespace
 
 int main() {
@@ -207,6 +235,7 @@ int main() {
         testAsyncMiddlewareContract();
         testStaticTraversalProtection();
         testTypedQueryRendering();
+        testAiChatHelper();
         std::cout << "Xpress++ core tests passed\n";
         return 0;
     } catch (const std::exception& error) {

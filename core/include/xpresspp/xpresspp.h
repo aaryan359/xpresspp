@@ -15,6 +15,7 @@
 #include "test.h"
 #include "websocket.h"
 #include "cache.h"
+#include "ai.h"
 #include "version.h"
 #include "db/query.h"
 #include "db/renderer.h"

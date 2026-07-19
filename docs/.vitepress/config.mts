@@ -33,6 +33,7 @@ export default defineConfig({
     nav: [
       { text: 'Guide', link: '/getting-started' },
       { text: 'Reference', link: '/request' },
+      { text: 'AI', link: '/ai' },
       { text: 'CLI', link: '/cli' },
       { text: '⚡ Benchmarks', link: '/benchmarks' },
       {
@@ -61,6 +62,7 @@ export default defineConfig({
           { text: 'Response', link: '/response' },
           { text: 'Middleware', link: '/middleware' },
           { text: 'Database', link: '/database' },
+          { text: 'AI Interface', link: '/ai' },
           { text: 'Error handling', link: '/error-handling' },
           { text: 'Configuration', link: '/configuration' },
         ]

@@ -3,6 +3,8 @@
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
+#include <iomanip>
+#include <memory>
 #include <stdexcept>
 #include <sstream>
 #include <string>
@@ -53,6 +55,57 @@ Json::Value runtimeInfo(std::uint64_t requests, const std::chrono::steady_clock:
         std::chrono::duration_cast<std::chrono::seconds>(uptime).count());
     info["workerThreads"] = static_cast<Json::UInt64>(std::thread::hardware_concurrency());
     return info;
+}
+
+std::uint64_t fnv1a64(const std::string& input, int rounds) {
+    std::uint64_t hash = 14695981039346656037ULL;
+    for (int round = 0; round < rounds; ++round) {
+        for (unsigned char byte : input) {
+            hash ^= byte;
+            hash *= 1099511628211ULL;
+        }
+        hash ^= static_cast<std::uint64_t>(round);
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+std::string toHex(std::uint64_t value) {
+    std::ostringstream out;
+    out << std::hex << std::setfill('0') << std::setw(16) << value;
+    return out.str();
+}
+
+Json::Value primeSieve(int limit) {
+    const auto started = std::chrono::steady_clock::now();
+    std::vector<bool> prime(static_cast<std::size_t>(limit) + 1, true);
+    if (limit >= 0) prime[0] = false;
+    if (limit >= 1) prime[1] = false;
+
+    for (int number = 2; number * number <= limit; ++number) {
+        if (!prime[static_cast<std::size_t>(number)]) continue;
+        for (int multiple = number * number; multiple <= limit; multiple += number) {
+            prime[static_cast<std::size_t>(multiple)] = false;
+        }
+    }
+
+    int count = 0;
+    int largest = 0;
+    for (int number = 2; number <= limit; ++number) {
+        if (prime[static_cast<std::size_t>(number)]) {
+            ++count;
+            largest = number;
+        }
+    }
+
+    Json::Value result(Json::objectValue);
+    result["limit"] = limit;
+    result["primeCount"] = count;
+    result["largestPrime"] = largest;
+    result["durationMs"] = static_cast<Json::Int64>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - started).count());
+    return result;
 }
 
 xp::Task<xp::ai::ChatResponse> callLocalLlm(const xp::ai::ChatRequest& input,
@@ -160,6 +213,8 @@ int main() {
                 "GET /health",
                 "GET /api/stats",
                 "POST /api/echo",
+                "GET /api/compute/primes?limit=100000",
+                "POST /api/compute/hash",
                 "POST /api/ai/chat",
                 "GET /api/llm/status",
                 "POST /api/llm/chat"
@@ -191,6 +246,54 @@ int main() {
         payload["method"] = req.method();
         payload["path"] = req.path();
         payload["requestId"] = req.header("x-request-id");
+        res.ok(payload);
+    });
+
+    app.get("/api/compute/primes", [](xp::Request& req, xp::Response& res) {
+        int limit = 100000;
+        if (!req.query("limit").empty()) {
+            try {
+                limit = std::stoi(req.query("limit"));
+            } catch (...) {
+                res.badRequest("Query parameter 'limit' must be an integer.");
+                return;
+            }
+        }
+
+        if (limit < 2 || limit > 2000000) {
+            res.badRequest("Use a limit between 2 and 2000000 for the public sandbox.");
+            return;
+        }
+
+        res.ok(primeSieve(limit));
+    });
+
+    app.post("/api/compute/hash", [](xp::Request& req, xp::Response& res) {
+        const auto body = req.json();
+        if (!body.isObject() || !body.isMember("text") || !body["text"].isString()) {
+            res.badRequest("Hash endpoint requires a JSON string field named 'text'.");
+            return;
+        }
+
+        int rounds = 10000;
+        if (body.isMember("rounds") && body["rounds"].isInt()) {
+            rounds = body["rounds"].asInt();
+        }
+        if (rounds < 1 || rounds > 200000) {
+            res.badRequest("Use rounds between 1 and 200000 for the public sandbox.");
+            return;
+        }
+
+        const auto started = std::chrono::steady_clock::now();
+        const auto hash = fnv1a64(body["text"].asString(), rounds);
+
+        Json::Value payload(Json::objectValue);
+        payload["algorithm"] = "fnv1a64-demo";
+        payload["hash"] = toHex(hash);
+        payload["rounds"] = rounds;
+        payload["durationMs"] = static_cast<Json::Int64>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - started).count());
         res.ok(payload);
     });
 
@@ -237,6 +340,65 @@ int main() {
             std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now() - started).count());
         res.ok(payload);
+        co_return;
+    });
+
+    app.post("/api/llm/stream", [=](xp::Request& req, xp::Response& res) async {
+        if (llm_base_url.empty()) {
+            res.status(503).json({
+                {"status", "error"},
+                {"message", "Real LLM mode is not configured on this sandbox."},
+                {"hint", "Run scripts/run_qwen_llm.sh, then start the sandbox with LLM_BASE_URL=http://127.0.0.1:8081."}
+            });
+            co_return;
+        }
+
+        const auto body = req.json();
+        if (!body.isObject() || !body.isMember("message") || !body["message"].isString() ||
+            body["message"].asString().empty()) {
+            res.badRequest("LLM stream requires a non-empty 'message' field.");
+            co_return;
+        }
+
+        xp::ai::ChatRequest input;
+        input.message = body["message"].asString();
+        input.model = llm_model;
+        input.body = body;
+
+        try {
+            auto output = co_await callLocalLlm(input, llm_base_url, llm_api_path, llm_model, llm_timeout);
+            auto reply = std::make_shared<std::string>(std::move(output.reply));
+            auto model = std::make_shared<std::string>(output.model);
+
+            res.stream("text/event-stream; charset=utf-8",
+                [reply, model](drogon::ResponseStreamPtr stream) mutable {
+                    std::thread([reply, model, stream = std::move(stream)]() mutable {
+                        stream->send("event: meta\n");
+                        stream->send("data: {\"model\":\"" + *model + "\"}\n\n");
+
+                        std::istringstream words(*reply);
+                        std::string word;
+                        while (words >> word) {
+                            if (!stream->send("data: " + word + "\n\n")) {
+                                stream->close();
+                                return;
+                            }
+                            std::this_thread::sleep_for(std::chrono::milliseconds(45));
+                        }
+
+                        stream->send("event: done\n");
+                        stream->send("data: [DONE]\n\n");
+                        stream->close();
+                    }).detach();
+                });
+        } catch (const std::exception& e) {
+            res.status(502).json({
+                {"status", "error"},
+                {"message", "Local LLM upstream failed."},
+                {"detail", e.what()}
+            });
+        }
+
         co_return;
     });
 

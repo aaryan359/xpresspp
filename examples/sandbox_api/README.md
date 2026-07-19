@@ -18,6 +18,7 @@ PORT=8080 examples/sandbox_api/build/xpresspp_sandbox_api
 curl http://localhost:8080/
 curl http://localhost:8080/health
 curl http://localhost:8080/api/stats
+curl "http://localhost:8080/api/compute/primes?limit=100000"
 ```
 
 Echo JSON:
@@ -26,6 +27,14 @@ Echo JSON:
 curl -X POST http://localhost:8080/api/echo \
   -H "Content-Type: application/json" \
   -d '{"hello":"xpress++"}'
+```
+
+Run a small deterministic CPU endpoint:
+
+```bash
+curl -X POST http://localhost:8080/api/compute/hash \
+  -H "Content-Type: application/json" \
+  -d '{"text":"native C++ APIs","rounds":50000}'
 ```
 
 Try the tiny AI demo endpoint:
@@ -48,6 +57,14 @@ Call the real local LLM proxy when configured:
 curl -X POST http://localhost:8080/api/llm/chat \
   -H "Content-Type: application/json" \
   -d '{"message":"Explain why someone would serve AI from C++."}'
+```
+
+Stream the generated answer as server-sent events:
+
+```bash
+curl -N -X POST http://localhost:8080/api/llm/stream \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Write five short lines about Xpress++."}'
 ```
 
 ## Add The Fixed Small LLM
@@ -124,13 +141,20 @@ Try the Xpress++ public sandbox:
 
 curl https://sandbox.xpresspp.dev/health
 curl https://sandbox.xpresspp.dev/api/stats
+curl "https://sandbox.xpresspp.dev/api/compute/primes?limit=100000"
 curl -X POST https://sandbox.xpresspp.dev/api/echo \
   -H "Content-Type: application/json" \
   -d '{"hello":"native C++ APIs"}'
+curl -X POST https://sandbox.xpresspp.dev/api/compute/hash \
+  -H "Content-Type: application/json" \
+  -d '{"text":"native C++ APIs","rounds":50000}'
 curl -X POST https://sandbox.xpresspp.dev/api/ai/chat \
   -H "Content-Type: application/json" \
   -d '{"message":"What can Xpress++ serve?"}'
 curl -X POST https://sandbox.xpresspp.dev/api/llm/chat \
   -H "Content-Type: application/json" \
   -d '{"message":"Give me a tiny C++ API idea."}'
+curl -N -X POST https://sandbox.xpresspp.dev/api/llm/stream \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Write five short lines about Xpress++."}'
 ```

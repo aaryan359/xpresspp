@@ -7,6 +7,8 @@
 #include <fstream>
 #include <concepts>
 #include <initializer_list>
+#include <functional>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -282,6 +284,18 @@ public:
 
         const std::string suggested = filename.empty() ? path.filename().string() : filename;
         native_response_ = drogon::HttpResponse::newFileResponse(path.string(), suggested);
+        sent_ = true;
+        return *this;
+    }
+
+    Response& stream(const std::string& content_type,
+                     std::function<void(drogon::ResponseStreamPtr)> callback,
+                     bool disable_kickoff_timeout = true) {
+        native_response_ = drogon::HttpResponse::newAsyncStreamResponse(std::move(callback),
+                                                                        disable_kickoff_timeout);
+        native_response_->addHeader("Content-Type", content_type);
+        native_response_->addHeader("Cache-Control", "no-cache");
+        native_response_->addHeader("X-Accel-Buffering", "no");
         sent_ = true;
         return *this;
     }

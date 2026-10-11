@@ -5,15 +5,18 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Add CLI executable with all modular source files
 add_executable(xp
     src/main.cpp
-    src/common.cpp
-    src/diagnostics.cpp
-    src/commands.cpp
-    src/schema_ir.cpp
-    src/db_generator.cpp
+    src/commands/build.cpp
+    src/commands/clean.cpp
+    src/commands/create.cpp
+    src/commands/dev.cpp
+    src/commands/doctor.cpp
+    src/commands/generate.cpp
+    src/util/console.cpp
+    src/util/diagnostics.cpp
+    src/util/paths.cpp
+    src/util/process.cpp
 )
 
-# Add local include/ directory to compilation path
-target_include_directories(xp PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include)
+target_include_directories(xp PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src)

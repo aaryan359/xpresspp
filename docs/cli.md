@@ -82,26 +82,6 @@ Deletes the `./build` directory, forcing a clean rebuild on the next `xp build` 
 xp clean
 ```
 
-### `xp migrate`
-
-Parses `schema.xp`, generates SQL migration files under `migrations/`, and generates the dynamic C++ database client in `build/generated/db.h`.
-
-```bash
-xp migrate
-```
-
----
-
-### `xp migrate rollback`
-
-Rolls back the last applied database migration by running your application's database rollback routines silently.
-
-```bash
-xp migrate rollback
-```
-
----
-
 ### `xp doctor`
 
 Checks that all required system dependencies are installed and ready.
@@ -142,7 +122,6 @@ The CLI uses these to locate the Xpress++ repo:
 | Variable | Description |
 |----------|-------------|
 | `XPRESSPP_HOME` | Absolute path to the xpress++ repo root. **Always set this in production/CI.** |
-| `XPRESSPP_CLI_PATH` | Path to the `xp` binary. Used as a fallback to auto-detect the repo root. |
 
 ```bash
 export XPRESSPP_HOME=/opt/xpresspp
@@ -174,6 +153,4 @@ When a build fails, the CLI analyses the compiler output and prints targeted hin
 | `xp run --release` | Build (release) and run |
 | `xp watch` | Auto-rebuild on source changes |
 | `xp clean` | Delete build cache |
-| `xp migrate` | Run migrations and generate client |
-| `xp migrate rollback` | Roll back the last migration |
 | `xp doctor` | Check dependencies |

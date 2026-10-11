@@ -24,12 +24,9 @@ my-app/
                 └── middleware/
                     ├── cors.h
                     ├── rate_limit.h
-                    ├── auth.h
                     ├── body_limit.h
-                    ├── csrf.h
                     ├── request_id.h
                     ├── security.h
-                    ├── session.h
                     └── validation.h
 ```
 

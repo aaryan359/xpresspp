@@ -1,6 +1,0 @@
-build/
-.vscode/
-.env
-*.db
-*.log
-*.o

@@ -33,7 +33,6 @@ export default defineConfig({
     nav: [
       { text: 'Guide', link: '/getting-started' },
       { text: 'Reference', link: '/request' },
-      { text: 'AI', link: '/ai' },
       { text: 'CLI', link: '/cli' },
       { text: '⚡ Benchmarks', link: '/benchmarks' },
       {
@@ -61,8 +60,6 @@ export default defineConfig({
           { text: 'Request', link: '/request' },
           { text: 'Response', link: '/response' },
           { text: 'Middleware', link: '/middleware' },
-          { text: 'Database', link: '/database' },
-          { text: 'AI Interface', link: '/ai' },
           { text: 'Error handling', link: '/error-handling' },
           { text: 'Configuration', link: '/configuration' },
         ]
@@ -71,14 +68,11 @@ export default defineConfig({
         text: ' Built-in Middleware',
         items: [
           { text: 'CORS', link: '/cors' },
-          { text: 'Authentication', link: '/authentication' },
           { text: 'Rate limiting', link: '/rate-limit' },
           { text: 'Security headers', link: '/security' },
-          { text: 'CSRF protection', link: '/csrf' },
-          { text: 'Session', link: '/session' },
           { text: 'Request ID', link: '/request-id' },
-          { text: 'Body limit', link: '/body-limit' },
           { text: 'Validation', link: '/validation' },
+          { text: 'Body limit', link: '/body-limit' },
           { text: 'Logging', link: '/logging' },
         ]
       },
@@ -89,7 +83,6 @@ export default defineConfig({
           { text: 'File uploads', link: '/file-uploads' },
           { text: 'JSON', link: '/json' },
           { text: 'Cookies', link: '/cookies' },
-          { text: 'WebSockets', link: '/websockets' },
         ]
       },
       {

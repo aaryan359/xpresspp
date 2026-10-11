@@ -76,7 +76,7 @@ Found a bug or want to add a feature? Pull requests are welcome!
 1. Fork the repo
 2. Create a branch: `git checkout -b feat/my-feature`
 3. Make your changes
-4. Test with `xp build` inside `templates/default_app`
+4. Test with `xp build` inside `examples/simple`
 5. Open a PR
 
 ---

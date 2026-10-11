@@ -1,68 +1,46 @@
-#include "cli/common.h"
-#include "cli/commands.h"
+#include "commands/commands.h"
+#include "util/util.h"
+
 #include <iostream>
 #include <string>
+#include <vector>
+
+using namespace xp::cli;
+
+static bool hasFlag(const std::vector<std::string>& args, const std::string& flag) {
+    for (const auto& arg : args) if (arg == flag) return true;
+    return false;
+}
 
 int main(int argc, char** argv) {
+    
     if (argc < 2) {
-        xp::cli::usage();
+        usage();
         return 0;
     }
 
     const std::string command = argv[1];
-    const bool release =
-        argc > 2 && std::string(argv[2]) == "--release";
+    const std::vector<std::string> args(argv + 2, argv + argc);  // everything after the command
 
     if (command == "create") {
-        if (argc < 3) {
-            xp::cli::error("Missing app name.",
-                           "",
-                           "xp create <app-name>");
-            return 1;
-        }
-        return xp::cli::createApp(argv[2]);
+        if (args.empty()) { error("Missing project name.", "", "xp create my-app"); return 1; }
+        return createApp(args[0]);
     }
-
     if (command == "generate" || command == "g") {
-        if (argc < 4) {
-            xp::cli::error("Missing generator type or name.",
-                           "",
-                           "xp generate route users\n"
-                           "xp g middleware auth");
-            return 1;
-        }
-        return xp::cli::generate(argv[2], argv[3]);
+        if (args.size() < 2) { error("Missing type or name.", "", "xp generate route users"); return 1; }
+        return generate(args[0], args[1]);
     }
-
-    if (command == "build")   return xp::cli::build(release);
-    if (command == "run")     return xp::cli::run(release);
-    if (command == "migrate") {
-        std::string arg1 = (argc > 2) ? argv[2] : "";
-        std::string arg2 = (argc > 3) ? argv[3] : "";
-        return xp::cli::migrate(arg1, arg2);
-    }
-    if (command == "db" && argc > 2 && std::string(argv[2]) == "push") {
-        return xp::cli::migrate("--db-push", argc > 3 ? argv[3] : "");
-    }
-    if (command == "dockerize") return xp::cli::dockerize();
-    if (command == "test") return xp::cli::test();
-    if (command == "--version" || command == "version" || command == "-v") {
+    if (command == "build")   return build(hasFlag(args, "--release"));
+    if (command == "run")     return run(hasFlag(args, "--release"));
+    if (command == "dev" || command == "watch") return watch();
+    if (command == "clean")   return clean();
+    if (command == "install") return installDeps();
+    if (command == "doctor")  return hasFlag(args, "--fix") ? installDeps() : doctor();
+    if (command == "version" || command == "--version" || command == "-v") {
         std::cout << "Xpress++ 0.1.0-alpha.0\n";
         return 0;
     }
-    if (command == "watch")   return xp::cli::watch();
-    if (command == "dev")     return xp::cli::watch();
-    if (command == "clean")   return xp::cli::clean();
-    if (command == "install") return xp::cli::installDeps();
-    if (command == "doctor") {
-        // Support: xp doctor --fix
-        const bool fix = (argc > 2 && std::string(argv[2]) == "--fix");
-        if (fix) return xp::cli::installDeps();
-        return xp::cli::doctor();
-    }
 
-    xp::cli::error("Unknown command: \"" + command + "\"",
-                  "",
-                  "Run 'xp' with no arguments to see available commands.");
+    error("Unknown command: \"" + command + "\"", "", "Run `xp` to see all commands.");
     return 1;
 }

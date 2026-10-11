@@ -37,3 +37,8 @@ docs/.vitepress/dist/
 # OS specific files
 .DS_Store
 Thumbs.db
+
+# Generated artifacts
+benchmarks/go/go_benchmark
+__pycache__/
+*.pyc

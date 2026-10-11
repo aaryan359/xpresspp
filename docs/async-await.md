@@ -22,7 +22,7 @@ With **Xpress++ Asynchronous Coroutines**:
 // Verbose, boilerplate-heavy syntax
 app.get("/users", [](xp::Request& req, xp::Response& res) -> xp::Task<void> {
     try {
-        auto users = co_await xpd.user.findMany();
+        auto users = co_await fetchUsers();
         res.json(users);
     } catch (const std::exception& e) {
         res.status(500).json({{"error", e.what()}});
@@ -36,7 +36,7 @@ app.get("/users", [](xp::Request& req, xp::Response& res) -> xp::Task<void> {
 // Clean, Express-like async/await syntax
 app.get("/users", [](xp::Request& req, xp::Response& res) async {
     try {
-        auto users = await xpd.user.findMany();
+        auto users = await fetchUsers();
         res.json(users);
     } catch (const std::exception& e) {
         res.status(500).json({{"error", e.what()}});
@@ -64,12 +64,7 @@ If you are writing a custom helper function that uses `async`, its return type m
 ```cpp
 // A custom async helper function
 xp::Task<Json::Value> fetchUserEmail(int userId) async {
-    xp::var query = {
-        {"where", {
-            {"id", userId}
-        }}
-    };
-    auto user = await xpd.user.findUnique(query);
+    auto user = await fetchUser(userId);
     if (user.isNull()) {
         co_return "";
     }
@@ -87,12 +82,7 @@ app.get("/check-user", [](xp::Request& req, xp::Response& res) async {
         co_return; // Exits the async coroutine safely
     }
 
-    xp::var query = {
-        {"where", {
-            {"username", username}
-        }}
-    };
-    auto user = await xpd.user.findUnique(query);
+    auto user = await fetchUser(username);
     res.json({{"exists", !user.isNull()}});
 });
 ```
@@ -108,22 +98,14 @@ You can chain multiple `await` calls sequentially inside your handler:
 app.get("/api/v1/profile", [](xp::Request& req, xp::Response& res) async {
     auto userId = std::stoi(req.query("id"));
 
-    xp::var userQuery = {
-        {"where", {{"id", userId}}}
-    };
-
     // Fetch user details first
-    auto user = await xpd.user.findUnique(userQuery);
+    auto user = await fetchUser(userId);
     if (user.isNull()) {
         res.status(404).json({{"error", "User not found"}});
         co_return;
     }
 
-    xp::var logsQuery = {
-        {"where", {{"user_id", userId}}}
-    };
-    // Fetch logs using info from the user result
-    auto logs = await xpd.auditLog.findMany(logsQuery);
+    auto logs = await fetchAuditLogs(userId);
 
     res.json({
         {"user", user},

@@ -1,8 +1,0 @@
-{
-  "name": "xpresspp-app",
-  "version-string": "0.1.0",
-  "dependencies": [
-    "drogon",
-    "jsoncpp"
-  ]
-}

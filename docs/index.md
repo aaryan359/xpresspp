@@ -77,10 +77,6 @@ hero:
 int main() {
     xp::App app;
 
-    app.post("/chat", xp::ai::chat([](const xp::ai::ChatRequest& input) {
-        return "Native model reply for: " + input.message;
-    }));
-
     app.get("/api/user", [](xp::Request&, xp::Response& res) {
         res.ok({
             {"status", "success"},
@@ -131,16 +127,6 @@ app.listen(3000);
       <p class="feature-detail">If you've used Express.js, you already know Xpress++. Routes, middleware, and responses all work exactly the way you'd expect.</p>
     </div>
     <div class="feature-card">
-      <span class="feature-icon">AI</span>
-      <h3 class="feature-title">Native AI interface</h3>
-      <p class="feature-detail">Expose C++ inference code as JSON APIs with <code>xp::ai::chat</code>. Bring your own llama.cpp, ONNX, OpenCV, Whisper, or custom model layer.</p>
-    </div>
-    <div class="feature-card">
-      <span class="feature-icon">SQL</span>
-      <h3 class="feature-title">Generated SQL client</h3>
-      <p class="feature-detail">Use <code>schema.xp</code>, migrations, and the generated <code>xpd</code> client for PostgreSQL, SQLite, and MySQL-backed services.</p>
-    </div>
-    <div class="feature-card">
       <span class="feature-icon">ERR</span>
       <h3 class="feature-title">Rich error handling</h3>
       <p class="feature-detail">Typed HTTP errors, developer hints in debug mode, and colored terminal output so you always know exactly what went wrong.</p>
@@ -148,7 +134,7 @@ app.listen(3000);
     <div class="feature-card">
       <span class="feature-icon">MW</span>
       <h3 class="feature-title">Built-in middleware</h3>
-      <p class="feature-detail">CORS, rate limiting, authentication, CSRF, security headers, sessions, request IDs, and body limits — all included, zero config required.</p>
+      <p class="feature-detail">CORS, rate limiting, security headers, request IDs, and body limits — all included, zero config required.</p>
     </div>
     <div class="feature-card">
       <span class="feature-icon">C++20</span>

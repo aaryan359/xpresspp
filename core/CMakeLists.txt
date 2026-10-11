@@ -16,10 +16,8 @@ target_include_directories(xpresspp INTERFACE
 
 find_package(Drogon REQUIRED)
 find_package(Jsoncpp REQUIRED)
-find_package(OpenSSL REQUIRED)
 
 target_link_libraries(xpresspp INTERFACE Drogon::Drogon)
-target_link_libraries(xpresspp INTERFACE OpenSSL::Crypto)
 
 if(TARGET Jsoncpp_lib)
     target_link_libraries(xpresspp INTERFACE Jsoncpp_lib)

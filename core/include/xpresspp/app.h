@@ -4,8 +4,6 @@
 #include "request.h"
 #include "response.h"
 #include "router.h"
-#include "database.h"
-#include "websocket.h"
 #include "env.h"
 
 #include <drogon/drogon.h>
@@ -169,7 +167,6 @@ private:
     Handler                   method_not_allowed_handler_;
     AppConfig                 config_;
     bool                      debug_ = true;
-    inline static std::atomic<bool> migration_failed{false};
 
     struct StaticMount {
         std::string          prefix;
@@ -567,73 +564,6 @@ public:
         // Load env variables if they aren't loaded yet
         xp::loadEnv();
 
-        drogon::app().registerBeginningAdvice([]() {
-            bool is_rollback = false;
-            bool is_migrate = false;
-            bool is_db_push = false;
-            std::ifstream cmdline("/proc/self/cmdline");
-            if (cmdline.is_open()) {
-                std::string arg;
-                while (std::getline(cmdline, arg, '\0')) {
-                    if (arg == "--rollback" || arg == "-r") {
-                        is_rollback = true;
-                    } else if (arg == "--migrate" || arg == "-m") {
-                        is_migrate = true;
-                    } else if (arg == "--db-push") {
-                        is_db_push = true;
-                    }
-                }
-            }
-            if (const char* env = std::getenv("XP_ROLLBACK")) {
-                if (std::string(env) == "true" || std::string(env) == "1") {
-                    is_rollback = true;
-                }
-            }
-            if (const char* env = std::getenv("XP_MIGRATE")) {
-                if (std::string(env) == "true" || std::string(env) == "1") {
-                    is_migrate = true;
-                }
-            }
-
-            if (is_db_push) {
-                auto do_push = []() -> drogon::AsyncTask {
-                    try {
-                        co_await xp::DatabaseManager::instance().runDbPush();
-                        drogon::app().quit();
-                    } catch (const std::exception& e) {
-                        std::cerr << "[Xpress++ DB Push Error] " << e.what() << std::endl;
-                        migration_failed.store(true);
-                        drogon::app().quit();
-                    }
-                };
-                do_push();
-            } else if (is_rollback) {
-                auto do_rollback = []() -> drogon::AsyncTask {
-                    try {
-                        co_await xp::DatabaseManager::instance().rollbackLastMigration();
-                        drogon::app().quit();
-                    } catch (const std::exception& e) {
-                        std::cerr << "[Xpress++ Rollback Error] " << e.what() << std::endl;
-                        migration_failed.store(true);
-                        drogon::app().quit();
-                    }
-                };
-                do_rollback();
-            } else if (is_migrate) {
-                auto do_migrate = []() -> drogon::AsyncTask {
-                    try {
-                        co_await xp::DatabaseManager::instance().runSync();
-                        drogon::app().quit();
-                    } catch (const std::exception& e) {
-                        std::cerr << "[Xpress++ Migration Error] " << e.what() << std::endl;
-                        migration_failed.store(true);
-                        drogon::app().quit();
-                    }
-                };
-                do_migrate();
-            }
-        });
-
         notFound([](Request& req, Response& res) {
             res.status(404).json({
                 {"status",  "error"},
@@ -657,144 +587,6 @@ public:
     }
 
     const AppConfig& config() const { return config_; }
-
-    static DbConfig parseDbUrl(const std::string& url) {
-        DbConfig db_config;
-        
-        auto scheme_end = url.find("://");
-        if (scheme_end == std::string::npos) {
-            throw std::invalid_argument("Invalid database connection URL: missing '://'");
-        }
-        
-        db_config.driver = url.substr(0, scheme_end);
-        std::string remainder = url.substr(scheme_end + 3);
-        
-        if (db_config.driver == "sqlite" || db_config.driver == "sqlite3") {
-            db_config.driver = "sqlite3";
-            db_config.database = remainder;
-            return db_config;
-        }
-        
-        auto at_sign = remainder.find('@');
-        std::string host_port_db = remainder;
-        if (at_sign != std::string::npos) {
-            std::string auth = remainder.substr(0, at_sign);
-            host_port_db = remainder.substr(at_sign + 1);
-            
-            auto colon = auth.find(':');
-            if (colon != std::string::npos) {
-                db_config.username = auth.substr(0, colon);
-                db_config.password = auth.substr(colon + 1);
-            } else {
-                db_config.username = auth;
-            }
-        }
-        
-        auto slash = host_port_db.find('/');
-        std::string host_port = host_port_db;
-        if (slash != std::string::npos) {
-            host_port = host_port_db.substr(0, slash);
-            db_config.database = host_port_db.substr(slash + 1);
-        }
-        
-        auto colon = host_port.find(':');
-        if (colon != std::string::npos) {
-            db_config.host = host_port.substr(0, colon);
-            db_config.port = std::stoi(host_port.substr(colon + 1));
-        } else {
-            db_config.host = host_port;
-            if (db_config.driver == "postgres" || db_config.driver == "postgresql") {
-                db_config.port = 5432;
-            } else if (db_config.driver == "mysql") {
-                db_config.port = 3306;
-            }
-        }
-        
-        return db_config;
-    }
-
-    App& database(const std::string& db_url, std::size_t connection_number = 1, const std::string& name = "default") {
-        xp::DatabaseManager::instance().connect(db_url);
-        if (db_url.rfind("mongodb://", 0) == 0 || db_url.rfind("mongodb+srv://", 0) == 0) {
-            return *this;
-        }
-        DbConfig config = parseDbUrl(db_url);
-        config.connection_number = connection_number;
-        config.name = name;
-        return database(config);
-    }
-
-    App& database(const DbConfig& db_config) {
-        xp::DatabaseManager::instance().connect(db_config);
-        std::string driver = db_config.driver;
-        if (driver == "sqlite" || driver == "sqlite3") {
-            driver = "sqlite3";
-        } else if (driver == "postgres" || driver == "postgresql") {
-            driver = "postgresql";
-        } else if (driver == "mysql") {
-            driver = "mysql";
-        } else if (driver == "mongodb") {
-            driver = "mongodb";
-        }
-
-        try {
-            if (driver == "sqlite3") {
-                drogon::orm::Sqlite3Config config{};
-                config.connectionNumber = db_config.connection_number;
-                config.filename = db_config.database;
-                config.name = db_config.name;
-                config.timeout = 0.0;
-                drogon::app().addDbClient(config);
-            } else if (driver == "postgresql") {
-                drogon::orm::PostgresConfig config{};
-                config.host = db_config.host;
-                config.port = static_cast<unsigned short>(db_config.port);
-                config.databaseName = db_config.database;
-                config.username = db_config.username;
-                config.password = db_config.password;
-                config.connectionNumber = db_config.connection_number;
-                config.name = db_config.name;
-                config.isFast = false;
-                drogon::app().addDbClient(config);
-            } else if (driver == "mysql") {
-                drogon::orm::MysqlConfig config{};
-                config.host = db_config.host;
-                config.port = static_cast<unsigned short>(db_config.port);
-                config.databaseName = db_config.database;
-                config.username = db_config.username;
-                config.password = db_config.password;
-                config.connectionNumber = db_config.connection_number;
-                config.name = db_config.name;
-                config.isFast = false;
-                drogon::app().addDbClient(config);
-            } else if (driver == "mongodb") {
-#if __has_include(<mongocxx/client.hpp>)
-                std::string url = "mongodb://";
-                if (!db_config.username.empty()) {
-                    url += db_config.username;
-                    if (!db_config.password.empty()) {
-                        url += ":" + db_config.password;
-                    }
-                    url += "@";
-                }
-                url += db_config.host;
-                if (db_config.port > 0) {
-                    url += ":" + std::to_string(db_config.port);
-                }
-                url += "/" + db_config.database;
-                MongoClientManager::get().connect(url, db_config.database);
-#else
-                throw std::runtime_error("MongoDB support is not compiled. Please install the MongoDB C++ driver (mongocxx).");
-#endif
-            } else {
-                throw std::invalid_argument("Unsupported database driver: " + driver);
-            }
-        } catch (const std::exception& e) {
-            std::cerr << "[xpress++ db error] Failed to create database client: " << e.what() << "\n";
-            throw;
-        }
-        return *this;
-    }
 
     App& use(Middleware middleware) {
         middleware_.push_back(std::move(middleware));
@@ -981,93 +773,13 @@ public:
     template <typename H> App& head   (const std::string& path, std::vector<Middleware> mw, H&& h) { router_.head   (path, std::move(mw), std::forward<H>(h)); return *this; }
     template <typename H> App& all    (const std::string& path, std::vector<Middleware> mw, H&& h) { router_.all    (path, std::move(mw), std::forward<H>(h)); return *this; }
 
-    App& ws(const std::string& path, std::function<void(WebSocketConn&)> h) {
-        WebSocketRegistry::routes()[path] = std::move(h);
-        return *this;
-    }
-
     std::vector<RouteInfo> routes() const { return router_.routes(); }
-
-    bool isRollbackRequested() const {
-        bool is_rollback = false;
-        std::ifstream cmdline("/proc/self/cmdline");
-        if (cmdline.is_open()) {
-            std::string arg;
-            while (std::getline(cmdline, arg, '\0')) {
-                if (arg == "--rollback" || arg == "-r") {
-                    is_rollback = true;
-                    break;
-                }
-            }
-        }
-        if (const char* env = std::getenv("XP_ROLLBACK")) {
-            if (std::string(env) == "true" || std::string(env) == "1") {
-                is_rollback = true;
-            }
-        }
-        return is_rollback;
-    }
-
-    bool isMigrateRequested() const {
-        bool is_migrate = false;
-        std::ifstream cmdline("/proc/self/cmdline");
-        if (cmdline.is_open()) {
-            std::string arg;
-            while (std::getline(cmdline, arg, '\0')) {
-                if (arg == "--migrate" || arg == "-m") {
-                    is_migrate = true;
-                    break;
-                }
-            }
-        }
-        if (const char* env = std::getenv("XP_MIGRATE")) {
-            if (std::string(env) == "true" || std::string(env) == "1") {
-                is_migrate = true;
-            }
-        }
-        return is_migrate;
-    }
-
-    bool isDbPushRequested() const {
-        std::ifstream cmdline("/proc/self/cmdline");
-        std::string arg;
-        while (cmdline.is_open() && std::getline(cmdline, arg, '\0'))
-            if (arg == "--db-push") return true;
-        return false;
-    }
-
-    void handleMigrationIfRequested() {
-        if (isRollbackRequested() || isMigrateRequested() || isDbPushRequested()) {
-            xp::loadEnv();
-            if (!xp::DatabaseManager::instance().isConnected()) {
-                if (const char* db_url = std::getenv("DATABASE_URL")) {
-                    try {
-                        this->database(db_url);
-                    } catch (const std::exception& e) {
-                        std::cerr << "[Xpress++ Migration Error] Failed to auto-configure database from DATABASE_URL: " << e.what() << std::endl;
-                        std::exit(1);
-                    }
-                } else {
-                    std::cerr << "[Xpress++ Migration Error] Database is not configured. Please define DATABASE_URL in your .env file or call app.database() in main.cpp." << std::endl;
-                    std::exit(1);
-                }
-            }
-            drogon::app().run();
-            if (migration_failed.load()) {
-                std::exit(1);
-            } else {
-                std::exit(0);
-            }
-        }
-    }
 
     void listen(int port) {
         listen("0.0.0.0", port);
     }
 
     void listen(const std::string& host, int port) {
-        handleMigrationIfRequested();
-
         validateConfig(host, port);
 
         auto& fw = drogon::app();
@@ -1099,8 +811,6 @@ public:
                    int                port,
                    const std::string& cert_file,
                    const std::string& key_file) {
-        handleMigrationIfRequested();
-
         validateConfig(host, port);
 
         if (!std::filesystem::exists(cert_file)) {

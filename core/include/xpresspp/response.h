@@ -150,28 +150,6 @@ public:
         return json(result);
     }
 
-    Response& json(const drogon::orm::Result& res) {
-        Json::Value arr(Json::arrayValue);
-        for (const auto& row : res) {
-            Json::Value val(Json::objectValue);
-            for (std::size_t i = 0; i < row.size(); ++i) {
-                const auto& field = row[i];
-                std::string colName = res.columnName(i);
-                if (field.isNull()) {
-                    val[colName] = Json::Value();
-                } else {
-                    try {
-                        val[colName] = field.as<std::string>();
-                    } catch (...) {
-                        val[colName] = Json::Value();
-                    }
-                }
-            }
-            arr.append(val);
-        }
-        return json(arr);
-    }
-
     Response& json(std::initializer_list<std::pair<std::string, Json::Value>> items) {
         Json::Value root;
         for (const auto& item : items) {

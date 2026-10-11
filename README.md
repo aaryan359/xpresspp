@@ -228,14 +228,9 @@ app.use([](xp::Request& req, xp::Response& res, xp::Next next) {
 | `xp::logger()` | Logs each request with method, path, status, and time |
 | `xp::cors(options)` | Adds CORS headers |
 | `xp::rateLimit(options)` | Limits requests per IP per time window |
-| `xp::apiKeyAuth(key)` | Requires an API key in the `X-API-Key` header |
-| `xp::basicAuth(fn)` | HTTP Basic authentication |
 | `xp::securityHeaders(options)` | Sets `X-Frame-Options`, `Referrer-Policy`, and more |
-| `xp::csrf(options)` | Verifies CSRF tokens |
-| `xp::session(options)` | Cookie-based session IDs |
 | `xp::requestId(header)` | Attaches a unique ID to each request |
 | `xp::bodyLimit(bytes)` | Rejects bodies larger than the given size |
-| `xp::validate(fn)` | Runs a custom validation function before the handler |
 
 ---
 
@@ -280,99 +275,6 @@ app.onError([](const std::exception& e, xp::Request& req, xp::Response& res) {
         status = he->statusCode();
     }
     res.status(status).json({{"error", e.what()}});
-});
-```
-
----
-
-## Database & ORM (Xpress++ Database Client)
-
-Xpress++ features a generated SQL database client for **PostgreSQL**, **SQLite**, and **MySQL**. Database clients are compiled from your schema definition, hidden from your source tree, and integrated with coroutine-friendly C++ syntax.
-
-> MongoDB is not part of the generated `xpd` client in this alpha. Keep MongoDB usage experimental for now.
-
-### 1. Define your schema (`schema.xp`)
-
-Create a `schema.xp` file at the root of your project:
-
-```prisma
-datasource db {
-  provider = "postgresql" // or "sqlite" / "mysql"
-}
-
-model User {
-  id        Int      @id @default(autoincrement())
-  username  String   @unique
-  password  String
-  createdAt DateTime @default(now())
-}
-```
-
-### 2. Generate and migrate the DB client
-
-Run the migrate command to synchronize your schema with the database and generate your type-safe database client:
-
-```bash
-xp migrate
-```
-
-This compiles a unified client dynamically in your build folder (`build/generated/db.h`) and exposes a global, ready-to-use database client instance named `xpd`.
-
-### 3. Querying the Database (C++ Coroutine Syntax)
-
-To make querying as close to JavaScript/Node.js as possible, Xpress++ defines `async` and `await` keywords, and provides `xp::var` for clean JSON object initialization.
-
-#### Creating a user:
-```cpp
-app.post("/users", [](xp::Request& req, xp::Response& res) async {
-    try {
-        auto body = req.json();
-        await xpd.user.create(body);
-        res.created({{"success", true}});
-    } catch (const std::exception& e) {
-        res.serverError(e.what());
-    }
-});
-```
-
-#### Finding many users with complex filters:
-```cpp
-app.get("/users", [](xp::Request& req, xp::Response& res) async {
-    try {
-        // Safe from SQL injection via automatically generated parameterized bindings
-        xp::var query = {
-            {"where", {
-                {"age", {
-                    {"gt", 18}
-                }},
-                {"status", "active"}
-            }}
-        };
-        
-        auto users = await xpd.user.findMany(query);
-        res.ok(users);
-    } catch (const std::exception& e) {
-        res.serverError(e.what());
-    }
-});
-```
-
-#### Updating a user:
-```cpp
-app.patch("/users/:id", [](xp::Request& req, xp::Response& res) async {
-    try {
-        const auto id = std::stoi(req.param("id"));
-        
-        xp::var updateQuery = {
-            {"where", {{"id", id}}},
-            {"data", {{"username", req.json()["username"]}}}
-        };
-        
-        await xpd.user.update(updateQuery);
-        res.ok({{"success", true}});
-    } catch (const std::exception& e) {
-        res.serverError(e.what());
-    }
 });
 ```
 
@@ -455,8 +357,8 @@ xpress++/
 │   └── include/xpresspp/
 ├── cli/                   <- The xp command-line tool (C++)
 │   └── src/main.cpp
-├── templates/             <- Project templates for xp create
-│   └── default_app/
+├── examples/              <- Example apps (xp create copies examples/simple)
+│   └── simple/
 ├── docs/                  <- VitePress documentation site
 └── install.sh             <- One-line install script
 ```
@@ -468,7 +370,7 @@ xpress++/
 1. Fork the repository
 2. Create a branch: `git checkout -b feat/your-feature`
 3. Make your changes
-4. Test inside `templates/default_app` with `xp build`
+4. Test inside `examples/simple` with `xp build`
 5. Open a pull request
 
 ---

@@ -164,11 +164,6 @@ Xpress++ ships with the following middleware out of the box:
 | `xp::logger()` | Color-coded request logging | [Logging](/logging) |
 | `xp::cors()` | CORS headers | [CORS](/cors) |
 | `xp::rateLimit()` | IP-based rate limiting | [Rate limit](/rate-limit) |
-| `xp::apiKeyAuth()` | API key authentication | [Auth](/authentication) |
-| `xp::basicAuth()` | HTTP Basic authentication | [Auth](/authentication) |
 | `xp::securityHeaders()` | Security headers (XSS, CSP, etc.) | [Security](/security) |
-| `xp::csrf()` | CSRF token verification | [CSRF](/csrf) |
-| `xp::session()` | Cookie-based sessions | [Session](/session) |
 | `xp::requestId()` | Attach unique request IDs | [Request ID](/request-id) |
 | `xp::bodyLimit()` | Reject oversized bodies | [Body limit](/body-limit) |
-| `xp::validate()` | Custom request validation | [Validation](/validation) |

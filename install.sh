@@ -172,7 +172,6 @@ install_wrapper() {
     cat > "${XP_WRAPPER}" << EOF
 #!/usr/bin/env bash
 export XPRESSPP_HOME="${ROOT_DIR}"
-export XPRESSPP_CLI_PATH="${XP_BINARY}"
 exec "${XP_BINARY}" "\$@"
 EOF
 
